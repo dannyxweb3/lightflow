@@ -1,0 +1,6 @@
+# Only for gateways connected through a private VPN or encrypted overlay.
+services:
+  control:
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+      - "${INTERNAL_BIND:?Set a private host IP}:${INTERNAL_PORT:-8443}:8443"

@@ -1,0 +1,6 @@
+.env
+.local/
+bin/
+coverage.out
+*.test
+__pycache__/

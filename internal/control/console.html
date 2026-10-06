@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nimbus 管理后台</title><link rel="stylesheet" href="/console/console.css"></head>
+<body><div id="login" class="login"><form id="login-form" class="card"><h1>Nimbus 管理后台</h1><p>请输入管理员密码</p><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button type="submit">登录</button><p id="login-error" class="error" role="alert"></p></form></div>
+<div id="app" hidden><aside><div class="brand">Nimbus <small>CONTROL</small></div><nav><button data-page="overview" class="active">概览</button><button data-page="users">用户与订阅</button><button data-page="endpoints">节点</button><button data-page="countries">国家</button></nav><button id="logout" class="logout">退出登录</button></aside><main><header><div><p class="eyebrow">管理后台</p><h1 id="title">概览</h1></div><button id="refresh" class="secondary">刷新</button></header><p id="notice" role="status"></p><section id="content"></section></main></div>
+<script src="/console/console.js" defer></script></body></html>
