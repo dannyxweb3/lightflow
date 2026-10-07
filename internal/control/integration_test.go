@@ -411,3 +411,27 @@ func TestGatewayTokenRotation(t *testing.T) {
 		t.Fatal("rotated gateway remained ready")
 	}
 }
+
+func TestEndpointAddressUpdateChangesCandidate(t *testing.T) {
+	f := newFixture(t, true)
+	a := f.account(2, 2)
+	status, first := f.request("POST", "/v1/connection-sessions", planInput(), a, "", security.Random(18))
+	if status != 200 {
+		t.Fatalf("initial plan: %d %v", status, first)
+	}
+	f.must("PATCH", "/admin/endpoints/gateway-1", map[string]any{"host": "bad host"}, nil, 400)
+	f.must("PATCH", "/admin/endpoints/gateway-1", map[string]any{"host": "192.168.194.128", "server_name": "vpn.lan", "port": 5443}, nil, 204)
+	var state string
+	if e := f.s.DB.QueryRow(context.Background(), `SELECT state FROM sessions WHERE id=$1`, first["lease_id"]).Scan(&state); e != nil || state != "revoked" {
+		t.Fatalf("old lease not revoked after endpoint address update: %q %v", state, e)
+	}
+	f.sync()
+	status, second := f.request("POST", "/v1/connection-sessions", planInput(), a, "", security.Random(18))
+	if status != 200 {
+		t.Fatalf("updated plan: %d %v", status, second)
+	}
+	candidate := second["candidates"].([]any)[0].(map[string]any)
+	if candidate["host"] != "192.168.194.128" || candidate["port"] != float64(5443) || candidate["public_params"].(map[string]any)["server_name"] != "vpn.lan" {
+		t.Fatalf("candidate did not use updated endpoint: %v", candidate)
+	}
+}

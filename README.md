@@ -25,6 +25,7 @@ curl --fail http://127.0.0.1:8080/readyz
 
 - [部署、外层 HTTPS、备份和升级](docs/DEPLOYMENT.md)
 - [API、设备签名与客户端接入](docs/API.md)
+- [Windows 宿主机内网联调](docs/WINDOWS_LAN.md)
 - [管理后台功能文档](docs/ADMIN_CONSOLE.md)
 - [实现范围、设计取舍和验收](docs/IMPLEMENTATION.md)
 - [OpenAPI 契约](docs/openapi.json)

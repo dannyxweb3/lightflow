@@ -32,7 +32,7 @@ def main():
             raise SystemExit(f'{path}: HTTP {e.code}; {e.read().decode()}') from None
     post('/admin/countries', {'code': env['GATEWAY_COUNTRY'], 'name': env['GATEWAY_COUNTRY']})
     endpoint = post('/admin/endpoints', {'id': env['GATEWAY_ID'], 'country_code': env['GATEWAY_COUNTRY'],
-        'host': env['GATEWAY_HOST'], 'port': int(env['GATEWAY_PORT']), 'server_name': env['GATEWAY_HOST'],
+        'host': env['GATEWAY_HOST'], 'port': int(env['GATEWAY_PORT']), 'server_name': env.get('GATEWAY_SERVER_NAME', env['GATEWAY_HOST']),
         'capacity': 100, 'auth_token': env['GATEWAY_AUTH_TOKEN']}, conflict_ok=True)
     if endpoint is None and a.rotate_gateway_token:
         req=urllib.request.Request(base+'/admin/endpoints/'+env['GATEWAY_ID'],data=json.dumps({'auth_token':env['GATEWAY_AUTH_TOKEN']}).encode(),method='PATCH',headers={'Content-Type':'application/json','Authorization':'Bearer '+env['ADMIN_KEY']})

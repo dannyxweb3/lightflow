@@ -83,6 +83,7 @@ def main():
         'API_PORT': '8080', 'LEASE_SECONDS': '600',
         'GATEWAY_AUTH_TOKEN': secrets.token_urlsafe(48),
         'GATEWAY_ID': a.gateway_id, 'GATEWAY_HOST': a.gateway_host,
+        'GATEWAY_SERVER_NAME': a.gateway_host,
         'GATEWAY_PORT': '4433', 'GATEWAY_COUNTRY': a.country,
     }
     (ROOT / '.env').write_text(''.join(f'{k}={v}\n' for k, v in settings.items()))

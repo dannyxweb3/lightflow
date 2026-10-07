@@ -1239,7 +1239,7 @@
     },
     "/admin/endpoints/{id}": {
       "patch": {
-        "summary": "Enable or disable gateway; disable revokes leases",
+        "summary": "Update gateway state or connection address; disruptive changes revoke leases",
         "operationId": "patch_admin_endpoints_id",
         "responses": {
           "204": {
@@ -1286,6 +1286,17 @@
                     "minLength": 32,
                     "maxLength": 256,
                     "writeOnly": true
+                  },
+                  "host": {
+                    "type": "string"
+                  },
+                  "server_name": {
+                    "type": "string"
+                  },
+                  "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
                   }
                 },
                 "anyOf": [
@@ -1297,6 +1308,21 @@
                   {
                     "required": [
                       "auth_token"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "host"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "server_name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "port"
                     ]
                   }
                 ],
@@ -2176,6 +2202,9 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "server_name": {
+            "type": "string"
           }
         },
         "required": [
@@ -2185,7 +2214,8 @@
           "port",
           "enabled",
           "ready",
-          "last_seen_at"
+          "last_seen_at",
+          "server_name"
         ],
         "additionalProperties": false
       },

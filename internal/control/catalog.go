@@ -86,16 +86,22 @@ func (s *Server) addEndpoint(w http.ResponseWriter, r *http.Request) error {
 }
 func (s *Server) setEndpoint(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
-		Enabled   *bool  `json:"enabled"`
-		AuthToken string `json:"auth_token"`
+		Enabled    *bool   `json:"enabled"`
+		AuthToken  string  `json:"auth_token"`
+		Host       *string `json:"host"`
+		ServerName *string `json:"server_name"`
+		Port       *int    `json:"port"`
 	}
 	if e := decode(w, r, &in); e != nil {
 		return e
 	}
-	if in.Enabled == nil && in.AuthToken == "" {
+	if in.Enabled == nil && in.AuthToken == "" && in.Host == nil && in.ServerName == nil && in.Port == nil {
 		return fail(400, "INVALID_ENDPOINT")
 	}
 	if in.AuthToken != "" && (len(in.AuthToken) < 32 || len(in.AuthToken) > 256) {
+		return fail(400, "INVALID_ENDPOINT")
+	}
+	if (in.Host != nil && !hostValid(*in.Host)) || (in.ServerName != nil && !hostValid(*in.ServerName)) || (in.Port != nil && (*in.Port < 1 || *in.Port > 65535)) {
 		return fail(400, "INVALID_ENDPOINT")
 	}
 	ctx := r.Context()
@@ -104,24 +110,24 @@ func (s *Server) setEndpoint(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	defer tx.Rollback(ctx)
-	tag, e := tx.Exec(ctx, `UPDATE endpoints SET enabled=COALESCE($2,enabled),auth_token_hash=COALESCE($3,auth_token_hash) WHERE id=$1`, r.PathValue("id"), in.Enabled, func() any {
+	tag, e := tx.Exec(ctx, `UPDATE endpoints SET enabled=COALESCE($2,enabled),auth_token_hash=COALESCE($3,auth_token_hash),host=COALESCE($4,host),server_name=COALESCE($5,server_name),port=COALESCE($6,port) WHERE id=$1`, r.PathValue("id"), in.Enabled, func() any {
 		if in.AuthToken == "" {
 			return nil
 		}
 		return security.Hash(in.AuthToken)
-	}())
+	}(), in.Host, in.ServerName, in.Port)
 	if e != nil {
 		return e
 	}
 	if tag.RowsAffected() == 0 {
 		return fail(404, "ENDPOINT_NOT_FOUND")
 	}
-	if in.AuthToken != "" {
+	if in.AuthToken != "" || in.Host != nil || in.ServerName != nil || in.Port != nil {
 		if _, e = tx.Exec(ctx, `UPDATE endpoints SET ready=false WHERE id=$1`, r.PathValue("id")); e != nil {
 			return e
 		}
 	}
-	if (in.Enabled != nil && !*in.Enabled) || in.AuthToken != "" {
+	if (in.Enabled != nil && !*in.Enabled) || in.AuthToken != "" || in.Host != nil || in.ServerName != nil || in.Port != nil {
 		if _, e = tx.Exec(ctx, `UPDATE sessions SET state='revoked' WHERE endpoint_id=$1 AND state IN ('pending','issued','active')`, r.PathValue("id")); e != nil {
 			return e
 		}
@@ -136,21 +142,21 @@ func (s *Server) setEndpoint(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (s *Server) listEndpoints(w http.ResponseWriter, r *http.Request) error {
-	rows, e := s.DB.Query(r.Context(), `SELECT id,country_code,host,port,enabled,ready,last_seen_at FROM endpoints ORDER BY id`)
+	rows, e := s.DB.Query(r.Context(), `SELECT id,country_code,host,port,server_name,enabled,ready,last_seen_at FROM endpoints ORDER BY id`)
 	if e != nil {
 		return e
 	}
 	defer rows.Close()
 	out := []map[string]any{}
 	for rows.Next() {
-		var id, c, h string
+		var id, c, h, serverName string
 		var p int
 		var enabled, ready bool
 		var seen *time.Time
-		if e = rows.Scan(&id, &c, &h, &p, &enabled, &ready, &seen); e != nil {
+		if e = rows.Scan(&id, &c, &h, &p, &serverName, &enabled, &ready, &seen); e != nil {
 			return e
 		}
-		out = append(out, map[string]any{"id": id, "country_code": c, "host": h, "port": p, "enabled": enabled, "ready": ready, "last_seen_at": seen})
+		out = append(out, map[string]any{"id": id, "country_code": c, "host": h, "port": p, "server_name": serverName, "enabled": enabled, "ready": ready, "last_seen_at": seen})
 	}
 	if e = rows.Err(); e != nil {
 		return e

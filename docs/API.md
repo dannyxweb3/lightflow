@@ -137,7 +137,7 @@ Idempotency-Key: <16..128字节随机字符串>
 | `PUT /admin/users/{id}/subscription` | plan、expires_at、device_limit、concurrent_limit、enabled |
 | `POST /admin/countries` | code、name；按 code 更新名称 |
 | `POST /admin/endpoints` | id、country_code、host、port、server_name、capacity、auth_token |
-| `PATCH /admin/endpoints/{id}` | `{"enabled":false}` 或 `{"auth_token":"新网关令牌"}`；停用或换令牌会撤销现存租约 |
+| `PATCH /admin/endpoints/{id}` | 可更新 `enabled`、`auth_token`、`host`、`server_name`、`port`；停用、换令牌或改地址会撤销现存租约 |
 | `GET /admin/endpoints` | 节点目录、ready、last_seen_at |
 | `GET /admin/overview` | 用户、活跃/待确认租约、节点数量 |
 | `GET /admin/users?search=&offset=` | 用户与订阅列表，每页 50 条 |
