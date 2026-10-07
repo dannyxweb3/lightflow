@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8080",
+      "url": "http://localhost:9010",
       "description": "Local HTTP API; external HTTPS terminates at a separate edge"
     }
   ],
@@ -1488,7 +1488,7 @@
         ],
         "servers": [
           {
-            "url": "http://control:8443"
+            "url": "http://control:9012"
           }
         ]
       }
@@ -1555,7 +1555,7 @@
         },
         "servers": [
           {
-            "url": "http://control:8443"
+            "url": "http://control:9012"
           }
         ]
       }

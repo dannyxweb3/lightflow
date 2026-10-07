@@ -2,5 +2,5 @@
 services:
   control:
     ports:
-      - "127.0.0.1:${API_PORT:-8080}:8080"
-      - "${INTERNAL_BIND:?Set a private host IP}:${INTERNAL_PORT:-8443}:8443"
+      - "127.0.0.1:${API_PORT:-9010}:9010"
+      - "${INTERNAL_BIND:?Set a private host IP}:${INTERNAL_PORT:-9012}:9012"

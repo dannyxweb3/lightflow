@@ -6,18 +6,20 @@
 
 ## 服务和端口
 
-| 服务 | 用途 | 宿主机端口 |
+| 服务 | 用途 | 监听与端口映射 |
 | --- | --- | --- |
-| postgres | 业务数据、租约和配额 | 不暴露 |
-| control | HTTP API、管理接口 | `127.0.0.1:8080/tcp` |
-| control 内部监听 | 网关授权快照和 ACK，HTTP + 网关令牌 | 默认不暴露；容器网络 `control:8443` |
+| postgres | 业务数据、租约和配额 | 容器网络 `postgres:9011/tcp`，不映射宿主机端口 |
+| control | HTTP API、管理接口 | `127.0.0.1:9010/tcp` |
+| control 内部监听 | 网关授权快照和 ACK，HTTP + 网关令牌 | 默认不暴露；容器网络 `control:9012/tcp` |
 | gateway | Agent 监管的 Hysteria2 网关 | `4433/udp` |
 
-Compose 中没有 HTTPS 终止服务。应用进程仅监听 HTTP。以后由现有 Nginx、Cloudflare Tunnel 或其他边缘层终止公开 API 的 HTTPS，并转发到 `127.0.0.1:8080`。边缘层只放行 `/v1/*`、`/healthz`、`/readyz`；`/admin/*`、`/metrics` 和 `/internal/*` 不应公开。
+网关容器内的认证回调和统计接口分别监听 `127.0.0.1:9013`、`127.0.0.1:9014`。上述 TCP 服务端口均位于 9010–9020 区间。客户端协议入口仍使用 `4433/udp`，它不属于管理 HTTP 服务端口。
+
+Compose 中没有 HTTPS 终止服务。应用进程仅监听 HTTP。以后由现有 Nginx、Cloudflare Tunnel 或其他边缘层终止公开 API 的 HTTPS，并转发到 `127.0.0.1:9010`。边缘层只放行 `/v1/*`、`/healthz`、`/readyz`；`/admin/*`、`/metrics` 和 `/internal/*` 不应公开。
 
 管理后台位于 `/console/`，同样只走应用 HTTP。公开 API 入口**不要**转发 `/console/*`；通过 SSH 隧道或独立的受控管理入口访问，具体功能见 [管理后台功能文档](ADMIN_CONSOLE.md)。生产外部 HTTPS 由 Nginx/Cloudflare 终止，`ADMIN_COOKIE_SECURE=true`。代理需保留原始 `Host`，以便后台校验写请求来源。
 
-网关的 QUIC 协议仍使用 TLS 证书，这是 VPN 协议握手所需，与 API HTTPS 终止无关。网关认证回调 9080 和统计接口 9090 只监听容器内 `127.0.0.1`。
+网关的 QUIC 协议仍使用 TLS 证书，这是 VPN 协议握手所需，与 API HTTPS 终止无关。网关认证回调和统计接口只监听容器内 `127.0.0.1`。
 
 ## 首次启动
 
@@ -29,12 +31,12 @@ docker compose config --quiet
 docker compose up -d --build postgres control
 python3 scripts/bootstrap.py
 docker compose up -d --build gateway
-curl --fail http://127.0.0.1:8080/readyz
+curl --fail http://127.0.0.1:9010/readyz
 ```
 
 初始化生成 `.env`、网关证书和私有 CA、策略签名公钥。随机网关令牌写入 `.env`，数据库仅存其 SHA-256 摘要；每个网关应使用不同令牌。所有私钥和 `.env` 均已被 Git 忽略。已有 `.env` 和 `.local` 时 `init.py` 拒绝覆盖，直接使用现有密钥。
 
-管理后台初始密码保存在 `.local/admin-console.json`，访问地址为 `http://127.0.0.1:8080/console/`。生产环境保持 `ADMIN_COOKIE_SECURE=true`，通过外部 HTTPS 管理入口访问；本机纯 HTTP 调试若浏览器不接受 Secure Cookie，可仅在本机测试环境将 `.env` 中 `ADMIN_COOKIE_SECURE=false` 并重建 control 容器。不要把后台和 `/admin/*` 放进公开 API 代理规则。
+管理后台初始密码保存在 `.local/admin-console.json`，访问地址为 `http://127.0.0.1:9010/console/`。生产环境保持 `ADMIN_COOKIE_SECURE=true`，通过外部 HTTPS 管理入口访问；本机纯 HTTP 调试若浏览器不接受 Secure Cookie，可仅在本机测试环境将 `.env` 中 `ADMIN_COOKIE_SECURE=false` 并重建 control 容器。不要把后台和 `/admin/*` 放进公开 API 代理规则。
 
 `bootstrap.py` 注册国家和网关，创建 30 天、5 设备、2 并发的首个账号。密码仅写入 `.local/initial-account.json`。重复执行不会更改已有账号密码或网关令牌。默认 `GATEWAY_HOST=localhost` 和私有 CA 证书只适合本机测试。向真实用户分发前，替换网关证书为客户端信任的证书链，或为客户端安全预置私有 CA。
 
@@ -43,6 +45,17 @@ curl --fail http://127.0.0.1:8080/readyz
 数据库数据使用 Docker 卷持久化。普通停止和升级不要使用 `docker compose down -v`，它会删除数据库卷。
 
 ## 已有配置升级
+
+从旧端口升级时，先改写现有 `.env` 中的 `API_PORT=8080`，再重建使用新端口的服务：
+
+```bash
+python3 scripts/upgrade_ports.py
+docker compose up -d --build --wait postgres control
+docker compose up -d --build --wait gateway
+curl --fail http://127.0.0.1:9010/readyz
+```
+
+PostgreSQL 在原数据卷上改为监听容器内的 9011，不创建新库，也不映射宿主机端口。控制面内部接口改为 9012；同机 Agent 会随 Compose 更新其 `CONTROL_URL`。如有独立网关，须将其 `CONTROL_URL` 和私网映射改为 9012 后再启动。同步将生产 Nginx 的上游改为 `127.0.0.1:9010`；先前内网联调使用 `scripts/lan_https.py` 启动的 Nginx，还须以相同 `--ip` 参数重新运行脚本来加载新上游。不要使用 `docker compose down -v`。
 
 已有部署增加管理后台密码：
 
@@ -67,9 +80,9 @@ docker compose up -d --build gateway
 
 ## 公开 API 和多地区网关
 
-公开 API 默认只绑定宿主机回环地址。将来的 Nginx/Cloudflare 层负责公网证书、HTTPS 和源站访问限制。**不要将 8080 直接发布到公网**：应用只提供 HTTP，且管理接口与用户接口共用该监听端口。反向代理须限制路径，管理操作通过服务器本机或 SSH 隧道进行。
+公开 API 默认只绑定宿主机回环地址。将来的 Nginx/Cloudflare 层负责公网证书、HTTPS 和源站访问限制。**不要将 9010 直接发布到公网**：应用只提供 HTTP，且管理接口与用户接口共用该监听端口。反向代理须限制路径，管理操作通过服务器本机或 SSH 隧道进行。
 
-同机网关通过 Compose 私有网络访问 `http://control:8443`。如果网关独立部署，先建立 WireGuard、IPsec 或其他加密私网，并把控制接口仅绑定在该私网地址：
+同机网关通过 Compose 私有网络访问 `http://control:9012`。如果网关独立部署，先建立 WireGuard、IPsec 或其他加密私网，并把控制接口仅绑定在该私网地址：
 
 ```bash
 # .env 里先配置 INTERNAL_BIND=<私网IP>
@@ -79,7 +92,7 @@ docker compose -f compose.yaml -f deploy/compose.private-control.yaml up -d --bu
 私网网关机器使用 [独立网关 Compose](../deploy/compose.gateway.yaml)，并提供 `.gateway.env`：
 
 ```dotenv
-CONTROL_URL=http://control.private.example:8443
+CONTROL_URL=http://control.private.example:9012
 GATEWAY_ID=gateway-jp-1
 GATEWAY_AUTH_TOKEN=<仅这个网关使用的随机高强度令牌>
 GATEWAY_PORT=4433
@@ -94,7 +107,7 @@ docker compose --project-directory . --env-file .gateway.env \
   -f deploy/compose.gateway.yaml up -d --build
 ```
 
-控制面与远程网关之间的 HTTP 必须位于加密私网内；不要在公网直接开放内部 8443。若以后由 Nginx 等独立边缘层为这个接口终止 HTTPS，Agent 的 `CONTROL_URL` 可改为对应 `https://` 地址，应用服务仍无需监听 HTTPS。内部接口必须在边缘层限制网关来源，且不与公开用户 API 共用公开路由。
+控制面与远程网关之间的 HTTP 必须位于加密私网内；不要在公网直接开放内部 9012。若以后由 Nginx 等独立边缘层为这个接口终止 HTTPS，Agent 的 `CONTROL_URL` 可改为对应 `https://` 地址，应用服务仍无需监听 HTTPS。内部接口必须在边缘层限制网关来源，且不与公开用户 API 共用公开路由。
 
 ## 运维与配置
 
@@ -107,7 +120,7 @@ docker compose --project-directory . --env-file .gateway.env \
 | `GATEWAY_AUTH_TOKEN` | 当前网关独立授权同步令牌，不与用户令牌混用 |
 | `LEASE_SECONDS` | 租约长度，默认 600，允许 10–3600 |
 | `GATEWAY_HOST` / `GATEWAY_PORT` | 返回给客户端的协议入口地址和 UDP 端口 |
-| `API_PORT` | 回环地址上的应用 HTTP 端口，默认 8080 |
+| `API_PORT` | 回环地址上的应用 HTTP 端口，默认 9010；旧 `.env` 运行 `scripts/upgrade_ports.py` 更新 |
 | `LOCAL_UID` / `LOCAL_GID` | 读取私有网关证书的容器用户 |
 
 单个网关令牌需要更换时，生成新值，通过 `PATCH /admin/endpoints/{id}` 提交 `auth_token`。控制面会将网关标为未就绪并撤销该网关租约；用相同新令牌重建 Agent。旧 Agent 在下次同步收到 401 后会关闭自身及 Hysteria 子进程。不要在正常重试 `bootstrap.py` 时轮换令牌。

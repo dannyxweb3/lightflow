@@ -22,7 +22,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ip', required=True, help='VM LAN IPv4 address reachable from Windows')
     parser.add_argument('--port', type=int, default=8443)
-    parser.add_argument('--api-port', type=int, default=8080)
+    parser.add_argument('--api-port', type=int, default=9010)
     args = parser.parse_args()
     ipaddress.IPv4Address(args.ip)
     if not (1024 <= args.port <= 65535 and 1 <= args.api_port <= 65535):

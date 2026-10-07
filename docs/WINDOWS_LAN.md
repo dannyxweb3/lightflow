@@ -24,7 +24,7 @@ python3 scripts/lan_https.py --ip 192.168.194.128
 curl --cacert .local/ca.crt https://192.168.194.128:8443/readyz
 ```
 
-此命令启动独立的非特权 Nginx 进程。虚拟机重启后须重新执行；虚拟机 DHCP 地址变化时也须重新执行，以便证书 SAN 与新 IP 一致。需要允许 Windows 宿主机访问虚拟机的 TCP 8443、UDP 4433。不要把 Docker 内部 8443、HTTP 8080、`/admin/*` 暴露给 Windows。
+此命令启动独立的非特权 Nginx 进程。虚拟机重启后须重新执行；虚拟机 DHCP 地址变化时也须重新执行，以便证书 SAN 与新 IP 一致。升级旧 Compose 端口后，先运行 `python3 scripts/upgrade_ports.py` 并重建服务，再以相同 `--ip` 重运行本脚本更新代理上游。需要允许 Windows 宿主机访问虚拟机的 TCP 8443、UDP 4433。不要把 Docker 内部 9012、HTTP 9010、`/admin/*` 暴露给 Windows。
 
 已初始化的节点最初登记为 `localhost`，仅改 `.env` 不会更新数据库。更新服务端后执行：
 

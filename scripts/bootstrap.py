@@ -19,7 +19,7 @@ def main():
     p.add_argument('--rotate-gateway-token', action='store_true', help='Replace the token on an existing endpoint and revoke its leases')
     a = p.parse_args()
     env = dict(line.split('=', 1) for line in (ROOT / '.env').read_text().splitlines() if line and not line.startswith('#'))
-    base = a.api or 'http://127.0.0.1:' + env.get('API_PORT', '8080')
+    base = a.api or 'http://127.0.0.1:' + env.get('API_PORT', '9010')
     def post(path, payload, conflict_ok=False):
         req = urllib.request.Request(base + path, data=json.dumps(payload).encode(), method='POST',
             headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + env['ADMIN_KEY']})

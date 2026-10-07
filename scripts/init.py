@@ -80,7 +80,7 @@ def main():
         'CREDENTIAL_KEY': base64.b64encode(secrets.token_bytes(32)).decode(),
         'SIGNING_KEY': base64.b64encode(seed).decode(),
         'LOCAL_UID': str(os.getuid()), 'LOCAL_GID': str(os.getgid()),
-        'API_PORT': '8080', 'LEASE_SECONDS': '600',
+        'API_PORT': '9010', 'LEASE_SECONDS': '600',
         'GATEWAY_AUTH_TOKEN': secrets.token_urlsafe(48),
         'GATEWAY_ID': a.gateway_id, 'GATEWAY_HOST': a.gateway_host,
         'GATEWAY_SERVER_NAME': a.gateway_host,

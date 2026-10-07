@@ -19,7 +19,7 @@ services:
       - ./.local/certs/gateway.key:/run/certs/gateway.key:ro
     ports: ["${GATEWAY_PORT:-4433}:4433/udp"]
     healthcheck:
-      test: [CMD, /usr/local/bin/nimbus, health, "http://127.0.0.1:9080/healthz"]
+      test: [CMD, /usr/local/bin/nimbus, health, "http://127.0.0.1:9013/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5

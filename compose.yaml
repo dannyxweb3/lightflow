@@ -12,13 +12,14 @@ services:
   postgres:
     image: postgres:16.9-alpine
     restart: unless-stopped
+    command: ["postgres", "-p", "9011"]
     environment:
       POSTGRES_DB: nimbus
       POSTGRES_USER: nimbus
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run python3 scripts/init.py first}
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
-      test: [CMD-SHELL, "pg_isready -U nimbus -d nimbus"]
+      test: [CMD-SHELL, "pg_isready -U nimbus -d nimbus -p 9011"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -31,7 +32,7 @@ services:
     build: {context: ., target: control}
     user: "${LOCAL_UID:-10001}:${LOCAL_GID:-10001}"
     environment:
-      DATABASE_URL: postgres://nimbus:${POSTGRES_PASSWORD}@postgres:5432/nimbus?sslmode=disable
+      DATABASE_URL: postgres://nimbus:${POSTGRES_PASSWORD}@postgres:9011/nimbus?sslmode=disable
       ADMIN_KEY: ${ADMIN_KEY:?Run init.py}
       ADMIN_CONSOLE_PASSWORD_HASH: ${ADMIN_CONSOLE_PASSWORD_HASH:-}
       ADMIN_COOKIE_SECURE: ${ADMIN_COOKIE_SECURE:-true}
@@ -39,11 +40,11 @@ services:
       SIGNING_KEY: ${SIGNING_KEY:?Run init.py}
       LEASE_SECONDS: ${LEASE_SECONDS:-600}
     ports:
-      - "127.0.0.1:${API_PORT:-8080}:8080"
+      - "127.0.0.1:${API_PORT:-9010}:9010"
     depends_on:
       postgres: {condition: service_healthy}
     healthcheck:
-      test: [CMD, /usr/local/bin/nimbus, health, "http://127.0.0.1:8080/readyz"]
+      test: [CMD, /usr/local/bin/nimbus, health, "http://127.0.0.1:9010/readyz"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -53,7 +54,7 @@ services:
     build: {context: ., target: gateway}
     user: "${LOCAL_UID:-10001}:${LOCAL_GID:-10001}"
     environment:
-      CONTROL_URL: http://control:8443
+      CONTROL_URL: http://control:9012
       GATEWAY_ID: ${GATEWAY_ID:-gateway-1}
       GATEWAY_AUTH_TOKEN: ${GATEWAY_AUTH_TOKEN:?Run scripts/upgrade_local.py for an existing .env}
       GATEWAY_TLS_CERT: /run/certs/gateway.crt
@@ -65,7 +66,7 @@ services:
     depends_on:
       control: {condition: service_healthy}
     healthcheck:
-      test: [CMD, /usr/local/bin/nimbus, health, "http://127.0.0.1:9080/healthz"]
+      test: [CMD, /usr/local/bin/nimbus, health, "http://127.0.0.1:9013/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5

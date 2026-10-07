@@ -48,7 +48,7 @@ def main():
         parser.error('gateway certificate does not cover the configured server name')
     endpoint_id = values['GATEWAY_ID']
     port = int(values['GATEWAY_PORT'])
-    base = 'http://127.0.0.1:' + values.get('API_PORT', '8080')
+    base = 'http://127.0.0.1:' + values.get('API_PORT', '9010')
     headers = {'Authorization': 'Bearer ' + values['ADMIN_KEY'], 'Content-Type': 'application/json'}
     endpoint = current_endpoint(base, headers, endpoint_id)
     if endpoint is None:

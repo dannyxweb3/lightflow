@@ -34,7 +34,7 @@ jobs:
           docker compose up -d --build --wait postgres control
           python3 scripts/bootstrap.py
           docker compose up -d --build --wait gateway
-          curl --fail http://127.0.0.1:8080/readyz
+          curl --fail http://127.0.0.1:9010/readyz
       - name: Run real protocol tests with packaged gateway binary
         run: |
           docker compose cp gateway:/usr/local/bin/hysteria /tmp/hysteria

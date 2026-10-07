@@ -98,8 +98,8 @@ func run() error {
 			return e
 		}
 		s := &control.Server{DB: db, AdminKey: admin, AdminPasswordHash: os.Getenv("ADMIN_CONSOLE_PASSWORD_HASH"), AdminCookieSecure: env("ADMIN_COOKIE_SECURE", "true") != "false", Master: master, Signing: ed25519.NewKeyFromSeed(seed), LeaseTTL: time.Duration(ttl) * time.Second, AckTimeout: 4 * time.Second, DummyPassword: dummy}
-		public := httpServer(env("HTTP_ADDR", ":8080"), s.Public())
-		internal := httpServer(env("INTERNAL_ADDR", ":8443"), s.Internal())
+		public := httpServer(env("HTTP_ADDR", ":9010"), s.Public())
+		internal := httpServer(env("INTERNAL_ADDR", ":9012"), s.Internal())
 
 		errs := make(chan error, 2)
 		go func() { errs <- public.ListenAndServe() }()
@@ -122,7 +122,7 @@ func run() error {
 		}
 		return e
 	case "agent":
-		return agent.Run(ctx, agent.Config{ControlURL: required("CONTROL_URL"), ID: required("GATEWAY_ID"), Token: required("GATEWAY_AUTH_TOKEN"), Hysteria: env("HYSTERIA_BIN", "/usr/local/bin/hysteria"), TLSCert: required("GATEWAY_TLS_CERT"), TLSKey: required("GATEWAY_TLS_KEY"), Listen: env("GATEWAY_LISTEN", ":4433"), AuthListen: env("AUTH_LISTEN", "127.0.0.1:9080"), StatsListen: env("STATS_LISTEN", "127.0.0.1:9090"), AllowPrivate: os.Getenv("ALLOW_PRIVATE_TARGETS") == "true"})
+		return agent.Run(ctx, agent.Config{ControlURL: required("CONTROL_URL"), ID: required("GATEWAY_ID"), Token: required("GATEWAY_AUTH_TOKEN"), Hysteria: env("HYSTERIA_BIN", "/usr/local/bin/hysteria"), TLSCert: required("GATEWAY_TLS_CERT"), TLSKey: required("GATEWAY_TLS_KEY"), Listen: env("GATEWAY_LISTEN", ":4433"), AuthListen: env("AUTH_LISTEN", "127.0.0.1:9013"), StatsListen: env("STATS_LISTEN", "127.0.0.1:9014"), AllowPrivate: os.Getenv("ALLOW_PRIVATE_TARGETS") == "true"})
 	default:
 		return fmt.Errorf("unknown command %q", os.Args[1])
 	}

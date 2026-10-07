@@ -16,12 +16,12 @@ docker compose config --quiet
 docker compose up -d --build postgres control
 python3 scripts/bootstrap.py
 docker compose up -d --build gateway
-curl --fail http://127.0.0.1:8080/readyz
+curl --fail http://127.0.0.1:9010/readyz
 ```
 
 初始化账户保存在 `.local/initial-account.json`，管理员密钥保存在 `.env`；不提供通用默认密码。API 默认只监听宿主机回环地址，网关开放 UDP 4433。应用 API 只提供 HTTP，默认网关证书由私有 CA 签发，测试客户端必须信任 `.local/certs/ca.crt`，不要关闭证书校验。
 
-管理后台位于 `http://127.0.0.1:8080/console/`，初始密码在 `.local/admin-console.json`。已有 `.env` 的部署先运行 `python3 scripts/init_admin.py` 并重建 control。后台只适合本机、SSH 隧道或受控管理入口；外部 HTTPS 仍由 Nginx/Cloudflare 处理。
+管理后台位于 `http://127.0.0.1:9010/console/`，初始密码在 `.local/admin-console.json`。已有 `.env` 的部署先运行 `python3 scripts/init_admin.py` 并重建 control。后台只适合本机、SSH 隧道或受控管理入口；外部 HTTPS 仍由 Nginx/Cloudflare 处理。
 
 - [部署、外层 HTTPS、备份和升级](docs/DEPLOYMENT.md)
 - [API、设备签名与客户端接入](docs/API.md)
