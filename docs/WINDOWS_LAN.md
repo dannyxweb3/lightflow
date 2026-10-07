@@ -35,6 +35,8 @@ python3 scripts/lan_endpoint.py --ip 192.168.194.128
 
 脚本调用受保护的管理 API，把节点 `host` 改成虚拟机 IP、保留与现有网关证书匹配的 `server_name=localhost`，并更新 `.env` 供以后重新初始化使用。地址变更会撤销该节点的旧租约；脚本确认网关重新就绪后打印不含秘密的候选地址。再次运行普通 `bootstrap.py` 不会改变已存在节点的密码或地址。
 
+如果刚重建 `control` 时脚本提示连接关闭，等待控制面健康后重新运行同一命令。脚本会先读取节点现状；地址已经更新时不会再次提交修改或撤销租约。
+
 ## 将联调文件复制到 Windows 项目
 
 Linux 部署目录的 `.local/` 已准备好 `API.md`、`initial-account.json` 和 `ca.crt`。在 **Windows 客户端项目根目录**运行 PowerShell：
