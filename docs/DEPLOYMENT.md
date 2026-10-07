@@ -22,8 +22,9 @@ Compose 中没有 HTTPS 终止服务。应用进程仅监听 HTTP。以后由现
 ```bash
 python3 scripts/init.py
 docker compose config --quiet
-docker compose up -d --build
+docker compose up -d --build postgres control
 python3 scripts/bootstrap.py
+docker compose up -d --build gateway
 curl --fail http://127.0.0.1:8080/readyz
 ```
 
@@ -32,6 +33,8 @@ curl --fail http://127.0.0.1:8080/readyz
 管理后台初始密码保存在 `.local/admin-console.json`，访问地址为 `http://127.0.0.1:8080/console/`。生产环境保持 `ADMIN_COOKIE_SECURE=true`，通过外部 HTTPS 管理入口访问；本机纯 HTTP 调试若浏览器不接受 Secure Cookie，可仅在本机测试环境将 `.env` 中 `ADMIN_COOKIE_SECURE=false` 并重建 control 容器。不要把后台和 `/admin/*` 放进公开 API 代理规则。
 
 `bootstrap.py` 注册国家和网关，创建 30 天、5 设备、2 并发的首个账号。密码仅写入 `.local/initial-account.json`。重复执行不会更改已有账号密码或网关令牌。默认 `GATEWAY_HOST=localhost` 和私有 CA 证书只适合本机测试。向真实用户分发前，替换网关证书为客户端信任的证书链，或为客户端安全预置私有 CA。
+
+必须先注册网关，再启动 `gateway`。如果先对全部服务执行 `docker compose up`，尚未登记的 Agent 会因 `gateway control authentication rejected` 而反复重启；执行 bootstrap 后会自动恢复。已登记节点出现同样日志时，可运行 `python3 scripts/bootstrap.py --rotate-gateway-token`，使数据库令牌与当前 `.env` 一致；该操作会撤销该节点的现有租约。
 
 数据库数据使用 Docker 卷持久化。普通停止和升级不要使用 `docker compose down -v`，它会删除数据库卷。
 

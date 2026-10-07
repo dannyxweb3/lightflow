@@ -13,8 +13,9 @@ Go 控制面 + PostgreSQL + 受监管的 Hysteria2 网关。提供不内置 HTTP
 python3 scripts/init.py
 
 docker compose config --quiet
-docker compose up -d --build
+docker compose up -d --build postgres control
 python3 scripts/bootstrap.py
+docker compose up -d --build gateway
 curl --fail http://127.0.0.1:8080/readyz
 ```
 

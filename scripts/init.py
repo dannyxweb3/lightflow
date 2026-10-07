@@ -87,7 +87,7 @@ def main():
     }
     (ROOT / '.env').write_text(''.join(f'{k}={v}\n' for k, v in settings.items()))
     print('Created .env and .local/certs (private keys, mode 0600).')
-    print('Next: docker compose up -d --build && python3 scripts/bootstrap.py')
+    print('Next: docker compose up -d --build postgres control && python3 scripts/bootstrap.py && docker compose up -d --build gateway')
     print('Gateway certificate uses the generated private CA; replace it for public production clients.')
 
 if __name__ == '__main__':
