@@ -1,5 +1,9 @@
 # Docker Compose 部署
 
+项目对外名称为 **Lightflow**。现有 Compose 项目名、PostgreSQL 用户/库名、Go 模块路径和内部协议标识仍沿用 `nimbus`，以便已有部署在升级时继续使用原数据库卷、账号和租约密钥；不要仅为改名删除或重建这些资源。
+
+生产域名建议使用 `lightflow.aibusinesses.cc` 提供客户端 HTTPS API，并使用 `lightflow-gw.aibusinesses.cc` 作为客户端直连的 Hysteria2 网关地址和 TLS SNI。前者由 Cloudflare/Nginx 代理，后者在 Cloudflare 设置为“仅 DNS”并直达网关 UDP 端口。管理后台若需远程访问，使用独立的 `lightflow-admin.aibusinesses.cc` HTTPS 入口，限制访问身份和来源，只代理 `/console/*`；公开 API 入口不代理管理路径。实际生产 IP、证书和数据库中的网关候选地址需要在部署时分别配置，不能沿用内网联调的 `192.168.194.128` 或 `localhost`。
+
 ## 服务和端口
 
 | 服务 | 用途 | 宿主机端口 |

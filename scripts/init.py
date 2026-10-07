@@ -35,7 +35,7 @@ def main():
     certs = ROOT / '.local' / 'certs'
     certs.mkdir(parents=True)
     run('openssl', 'req', '-x509', '-newkey', 'rsa:3072', '-nodes', '-sha256',
-        '-days', '3650', '-subj', '/CN=Nimbus Internal CA',
+        '-days', '3650', '-subj', '/CN=Lightflow Internal CA',
         '-keyout', str(certs / 'ca.key'), '-out', str(certs / 'ca.crt'),
         '-addext', 'basicConstraints=critical,CA:TRUE',
         '-addext', 'keyUsage=critical,keyCertSign,cRLSign')

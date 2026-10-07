@@ -1,4 +1,4 @@
-# Nimbus VPN 技术方案
+# Lightflow 技术方案
 
 版本：v0.1  
 日期：2026-10-06  

@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Nimbus Control Plane",
+    "title": "Lightflow Control Plane",
     "version": "0.1.0",
     "description": "Hysteria2 server-side foundation. See API.md for proof encoding and exact retry semantics."
   },

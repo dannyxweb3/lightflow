@@ -1,4 +1,4 @@
-# Nimbus VPN 服务端
+# Lightflow 服务端
 
 Go 控制面 + PostgreSQL + 受监管的 Hysteria2 网关。提供不内置 HTTPS 终止的 Docker Compose 部署、设备签名、临时租约、服务端强制断连和可执行集成测试。
 
