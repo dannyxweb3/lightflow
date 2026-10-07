@@ -31,8 +31,9 @@ jobs:
         run: |
           python3 scripts/init.py
           docker compose config --quiet
-          docker compose up -d --build --wait
+          docker compose up -d --build --wait postgres control
           python3 scripts/bootstrap.py
+          docker compose up -d --build --wait gateway
           curl --fail http://127.0.0.1:8080/readyz
       - name: Run real protocol tests with packaged gateway binary
         run: |
