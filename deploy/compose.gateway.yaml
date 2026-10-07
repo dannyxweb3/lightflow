@@ -7,7 +7,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    tmpfs: [/tmp:size=32m,mode=1777]
+    tmpfs: ["/tmp:size=32m,mode=1777"]
     environment:
       CONTROL_URL: ${CONTROL_URL:?Set a private-network control URL}
       GATEWAY_ID: ${GATEWAY_ID:?Set a unique gateway ID}
