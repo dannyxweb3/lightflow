@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Check, ChevronDown, CircleHelp, Cloud, Globe2, Home, LoaderCircle, LockKeyhole, Power, Search, Settings2, Shield, ShieldCheck, SlidersHorizontal, UserRound, Wifi, X } from 'lucide-react';
 import { browserPreview, request } from './client';
+import { launchProfile } from './launchProfile';
 import { errorMessage, isBusy, newest, stateLabels, type Command, type Country, type NetworkMode, type Snapshot } from './model';
 
 type Page = 'home' | 'countries' | 'settings' | 'account' | 'diagnostics';
@@ -90,9 +91,10 @@ export default function App() {
     </aside>
 
     <main>
-      <header><div className="breadcrumb">工作区 <span>/</span> {({ home: '连接', countries: '国家与地区', settings: '设置', account: '账户', diagnostics: '诊断' })[page]}</div><span className={`service-badge ${ready ? 'online' : ''}`}><i/>{ready ? (browserPreview ? '浏览器预览' : '本地服务就绪') : '等待本地服务'}</span></header>
+      <header><div className="breadcrumb">{launchProfile?.label ?? '工作区'} <span>/</span> {({ home: '连接', countries: '国家与地区', settings: '设置', account: '账户', diagnostics: '诊断' })[page]}</div><span className={`service-badge ${ready ? 'online' : ''}`}><i/>{ready ? (browserPreview ? '浏览器预览' : '本地服务就绪') : '等待本地服务'}</span></header>
       <div className="page-content">
         <div className="demo-banner"><span><Shield size={15}/><strong>开发演示</strong> · 当前连接不会保护网络流量，国家及延迟为示例数据。</span><span>M1 / 客户端骨架</span></div>
+        {launchProfile && <div className="launch-profile"><strong>{launchProfile.label} · 待接入</strong><span>控制面：{launchProfile.control}</span><span>网关：{launchProfile.gateway}</span><small>此入口仅选择联调目标；桌面登录与真实连接尚未接入。</small></div>}
         {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => { setNotice(''); void snapshot.refetch(); }}>重试</button></div>}
 
         {page === 'home' && <>
