@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio"
-	"nimbus.local/client/internal/daemon"
+	"nimbus/internal/daemon"
 )
 
 func TestNamedPipeRoundTripAndCancellation(t *testing.T) {

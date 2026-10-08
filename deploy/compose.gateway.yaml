@@ -1,0 +1,28 @@
+name: nimbus-gateway
+services:
+  gateway:
+    build: {context: ., target: gateway}
+    restart: unless-stopped
+    user: "${LOCAL_UID:-10001}:${LOCAL_GID:-10001}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    environment:
+      CONTROL_URL: ${CONTROL_URL:?Set a private-network control URL}
+      GATEWAY_ID: ${GATEWAY_ID:?Set a unique gateway ID}
+      GATEWAY_AUTH_TOKEN: ${GATEWAY_AUTH_TOKEN:?Set this gateway secret}
+      GATEWAY_TLS_CERT: /run/certs/gateway.crt
+      GATEWAY_TLS_KEY: /run/certs/gateway.key
+    volumes:
+      - ./.local/certs/gateway.crt:/run/certs/gateway.crt:ro
+      - ./.local/certs/gateway.key:/run/certs/gateway.key:ro
+    ports: ["${GATEWAY_PORT:-4433}:4433/udp"]
+    healthcheck:
+      test: [CMD, /usr/local/bin/nimbus, health, "http://127.0.0.1:9013/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

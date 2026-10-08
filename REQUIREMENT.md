@@ -1,7 +1,7 @@
 # 跨平台 VPN 客户端项目需求文档
 
 版本：v0.2  
-项目代号：暂定 `Nimbus VPN`  
+项目代号：`Lightflow`
 目标平台：Windows / macOS / Linux
 
 ## 1. 项目目标

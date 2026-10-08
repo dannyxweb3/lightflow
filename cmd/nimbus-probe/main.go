@@ -26,8 +26,8 @@ import (
 	"sync"
 	"time"
 
-	"nimbus.local/client/internal/controlclient"
-	"nimbus.local/client/internal/securefile"
+	"nimbus/internal/controlclient"
+	"nimbus/internal/securefile"
 )
 
 const officialDigest = "162ef8fe55dc7ec810dda662908f8e65ec36bd6da39cb87c3bd66184ab68f067"

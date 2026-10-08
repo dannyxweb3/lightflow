@@ -5,7 +5,7 @@ package ipc
 import (
 	"context"
 	"errors"
-	"nimbus.local/client/internal/daemon"
+	"nimbus/internal/daemon"
 )
 
 func Serve(ctx context.Context, controller *daemon.Controller) error {

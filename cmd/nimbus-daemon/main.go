@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"time"
 
-	"nimbus.local/client/internal/daemon"
-	"nimbus.local/client/internal/ipc"
+	"nimbus/internal/daemon"
+	"nimbus/internal/ipc"
 )
 
 func main() {

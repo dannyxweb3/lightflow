@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 
-	"nimbus.local/client/internal/controlclient"
+	"nimbus/internal/controlclient"
 )
 
 // Explicit field projection prevents secrets from entering diagnostic output.

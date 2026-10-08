@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"nimbus.local/client/internal/controlclient"
+	"nimbus/internal/controlclient"
 )
 
 func TestCandidateDiagnosticExcludesCredentialAndIDs(t *testing.T) {

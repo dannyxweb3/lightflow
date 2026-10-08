@@ -15,7 +15,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
-	"nimbus.local/client/internal/daemon"
+	"nimbus/internal/daemon"
 )
 
 const PipeName = `\\.\pipe\nimbus-vpn-dev-v1`

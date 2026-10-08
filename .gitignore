@@ -11,3 +11,6 @@ bin/
 .DS_Store
 coverage/
 test-results/
+coverage.out
+*.test
+__pycache__/
