@@ -8,6 +8,8 @@
 
 当前交付 M1：Tauri 2 + React/TypeScript UI、Rust IPC Bridge、Go 本地开发服务、Windows Named Pipe 和演示状态机。**当前版本不会建立真实 VPN，不修改系统 DNS、路由或防火墙，也不提供 Kill Switch 保护。**
 
+2026-10-08 客户端纠偏后的执行基线见 [客户端技术方案](docs/client/TECHNICAL_DESIGN.md)、[执行计划](docs/client/EXECUTION_PLAN.md) 与 [最小 Daemon 设计](docs/client/WINDOWS_DAEMON.md)。下一步先验证 Mihomo 在 Windows 的真实分流、DNS 与恢复，随后接入真实服务与 UI。客户端目录及历史代码例外见 [共享规则](AGENTS.md)，服务端协作需求见 [交接记录](docs/client/SERVER_REQUESTS.md)。
+
 ### 启动
 
 不熟悉命令行时，在文件资源管理器打开项目目录，选择一个启动入口双击，无需输入命令：
@@ -112,10 +114,11 @@ curl --fail http://127.0.0.1:9010/readyz
 
 - [部署、外层 HTTPS、备份和升级](docs/DEPLOYMENT.md)
 - [服务端 MVP 重新设计与改进计划](docs/SERVER_MVP_REDESIGN.md)
+- [服务端与客户端文件归属约定](AGENTS.md)
 - [生产服务端重部署](docs/PRODUCTION_REDEPLOY.md)
 - [Windows 客户端连接生产环境](docs/CLIENT_PRODUCTION.md)
 - [API、设备签名与客户端接入](docs/API.md)
-- [Windows 宿主机内网联调](docs/WINDOWS_LAN.md)
+- [Windows 宿主机 S0 内网联调](docs/WINDOWS_LAN.md)
 - [管理后台功能文档](docs/ADMIN_CONSOLE.md)
 - [实现范围、设计取舍和验收](docs/IMPLEMENTATION.md)
 - [OpenAPI 契约](docs/openapi.json)

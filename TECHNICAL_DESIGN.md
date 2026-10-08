@@ -5,7 +5,11 @@
 需求依据：[REQUIREMENT.md](./REQUIREMENT.md) v0.2  
 状态：开发前设计草案；架构决策已提出，平台能力及协议授权机制仍需 M0 原型验证。
 
+> **MVP 范围（2026-10-08）**：本文件保留原 V1 蓝图供后续参考，不代表当前交付范围。当前目标是邀请制 Windows 内测：现有 Hysteria2 连接，UDP 不通时回退 VLESS-Reality，完成智能/全局模式与断开后的网络恢复。服务端执行基线见 [服务端 MVP 重新设计](docs/SERVER_MVP_REDESIGN.md)；客户端设计由客户端工作区写入 `docs/client/`。各章下方的“MVP 状态”优先于尚未更新的 V1 正文。`TECHNICAL_DESIGN.md` 仅由服务端工作区修改，仓库文件归属见 [AGENTS.md](AGENTS.md)。
+
 ## 1. 方案结论与适用范围
+
+**MVP 状态：**Windows 邀请制内测；服务端采用现有邮箱密码、PostgreSQL、单候选和 Hysteria2，另补 VLESS-Reality TCP 回退。Redis、多平台和完整 V1 矩阵后置。
 
 采用 **Tauri 2 + React + TypeScript 桌面端、Go 本地网络服务、独立 Mihomo 核心进程、Go 云端控制面、PostgreSQL + Redis**。桌面端不以管理员身份运行；安装器负责安装需要权限的网络服务。系统流量通过 TUN 接管，不能把设置系统 HTTP/SOCKS 代理当作完整 VPN 实现。
 
@@ -18,6 +22,8 @@ V1 覆盖 Windows、macOS、Linux 完整连接闭环，包含账户、设备、�
 当前目录只有需求文档，没有可复用实现。本文所有数值均为工程初始值或验收目标，不代表实测结果；M0/M2 的测量结果用于校准。
 
 ## 2. 总体架构与职责
+
+**MVP 状态：**服务端控制面与 Hysteria2 Agent 已实现；Windows 客户端尚在原型阶段。Redis 与 Artifact Service 不进入 MVP；服务端新增工作见独立执行基线。
 
 ```mermaid
 flowchart TB
@@ -54,6 +60,8 @@ flowchart TB
 
 ## 3. 技术选型与版本策略
 
+**MVP 状态：**PostgreSQL 是唯一服务端状态存储；Redis、对象存储/CDN 和通用 OpenTelemetry 平台后置。客户端技术选型由 `docs/client/` 维护。
+
 | 层级 | 选择 | 原因与约束 |
 | --- | --- | --- |
 | 桌面 | Tauri 2、React、TypeScript、Vite | 共享交互；Rust Bridge 是桌面壳必需部分 |
@@ -71,6 +79,8 @@ Mihomo 仓库提供 GPL v3 许可证文本。分发前应核验选定版本的�
 
 ## 4. Desktop Architecture
 
+**MVP 状态：**客户端归属章节；MVP 采用现有邮箱密码而非 OIDC，Windows 实施细节由 `docs/client/` 给出。
+
 页面划分为登录、首页、国家、账户/设备、设置、诊断、关于/更新。首页展示产品状态与国家；服务器 ID、协议参数、原始核心错误仅保留在内部。
 
 - 首次启动检查网络服务安装、版本兼容与权限；安装失败提供具体修复入口。
@@ -82,6 +92,8 @@ Mihomo 仓库提供 GPL v3 许可证文本。分发前应核验选定版本的�
 - 对页面启用 CSP 与最小 Tauri capabilities，远程网页不得获得本地命令权限。白名单命令为 get_status、connect、disconnect、update_settings、list_devices、export_diagnostics 等。[来源：Tauri Capabilities](https://v2.tauri.app/security/capabilities/)
 
 ## 5. Daemon Design 与本地 IPC
+
+**MVP 状态：**客户端归属章节；优先 Windows Service 与受限 IPC 原型，macOS/Linux 留待 V1。
 
 Windows 使用 Windows Service；macOS 使用 launchd 特权 helper；Linux 使用 systemd 服务。服务独立于 UI 生命周期，支持启动时恢复和核心崩溃监控。
 
@@ -129,6 +141,8 @@ Connected 的条件为核心存活、路由/DNS 已应用、通过指定候选�
 
 ## 6. Networking Design：三平台接管
 
+**MVP 状态：**客户端归属章节；先验证 Windows Mihomo TUN/auto-route/strict-route，不在 MVP 自行重写三平台路由管理。
+
 Mihomo 文档提供 TUN、自动路由及平台相关选项。方案采用 Daemon 管理系统路由/DNS/防火墙，核心仅拥有 TUN 和转发；优先关闭核心自动路由/自动重定向，避免双重修改。能否完全分离及相应配置必须在 M0 验证，不能直接假定三平台一致。[来源：Mihomo TUN](https://wiki.metacubex.one/en/config/inbound/tun/)
 
 | 平台 | V1 接管与恢复 | Kill Switch | 发布与风险 |
@@ -166,6 +180,8 @@ macOS Network Extension 作为后续系统 VPN 集成路线，不能把外部 Mi
 
 ## 7. Routing Design 与网络模式
 
+**MVP 状态：**客户端归属章节；Windows 先实现智能、全局、直连，规则配置以原型实测为准。
+
 同一版本规则模型供核心配置、DNS 策略及封锁决策使用。国家选择只改变代理出口，不改变分流规则。
 
 智能模式优先级：
@@ -181,6 +197,8 @@ macOS Network Extension 作为后续系统 VPN 集成路线，不能把外部 Mi
 规则不依据 .cn 后缀单独判断。国内域名、CIDR、LAN、产品必要端点分别维护；数据来源、许可、误匹配与 IPv6 覆盖在规则构建流程中审核。保留版本、来源版本、schema_version、哈希及签名，原子替换并支持回滚。
 
 ## 8. DNS Design
+
+**MVP 状态：**客户端归属章节；先验证 Windows fake-ip 与 DNS 劫持，无泄漏证据由 Windows 原型提供。
 
 首版优先采用核心内置 DNS 与 fake-ip 模式，由 Daemon 生成配置。Mihomo 提供 fake-ip/redir-host 和 IPv6 DNS 设置；兼容性问题通过受控 fake-ip-filter 处理，而非让用户编辑 DNS。[来源：Mihomo DNS](https://wiki.metacubex.one/en/config/dns/)
 
@@ -200,6 +218,8 @@ macOS Network Extension 作为后续系统 VPN 集成路线，不能把外部 Mi
 连接前优先使用随包签名 bootstrap 配置和可验证 TLS 的备用控制面端点；bootstrap 解析不能依赖尚未建立的隧道。禁止关闭 TLS 校验。非国内受保护 DNS 在隧道断开期间由 Kill Switch 一同阻断。
 
 ## 9. Proxy Core Integration Design
+
+**MVP 状态：**客户端归属章节；MVP 只对接 Hysteria2 与 VLESS-Reality，其他协议待需求变更确认后进入 V1/P2。
 
 定义与核心无关的 DesiredConnection、Endpoint、RoutingPolicy、DNSPolicy、CoreCapabilities、CoreStatus。业务包不引用 Mihomo 配置类型。
 
@@ -235,6 +255,8 @@ Mihomo 提供 Snell 配置，但客户端可拨号不代表服务器能执行临
 
 ## 10. Control Plane Design 与服务器健康
 
+**MVP 状态：**邮箱密码、PG、单候选和最低负载选择已实现；多区域评分/健康 Worker 后置。服务端先向 Windows 提供可用测试环境。
+
 模块包括 Identity、Entitlement、Device、Catalog、Session、Selection、Policy、Artifact、Admin、Health Worker。管理后台独立鉴权、管理员 MFA、角色权限及审计；客户端不能调用管理员接口。
 
 当前 Gateway Agent 通过私有网络 HTTP + 每网关独立令牌拉取授权快照并回报就绪状态；控制面只存令牌摘要，内部端口默认不映射宿主机。未来多地区部署需要加密私网或外部边缘层终止 HTTPS，不让应用进程承载 HTTPS。CPU、带宽及握手失败率上报属于后续健康能力。健康 Worker 从多个区域执行端到端探测；单纯 ping 不代表协议可用。初始心跳 15 秒、主动探测 30 秒，连续 3 次失败进入隔离；恢复需连续成功且经过冷却期。
@@ -246,6 +268,8 @@ Mihomo 提供 Snell 配置，但客户端可拨号不代表服务器能执行临
 快速连接在可用国家集合内评分，近期成功国家可加有限偏好；手动国家连接仅在该国内切换服务器和协议，不能静默切换国家。连续失败进入候选冷却，恢复后分批重新引流。评分权重、协议顺序及超时通过有版本的签名策略发布，客户端本地限制最大重试数和最短超时。
 
 ## 11. 临时连接授权与设备限制
+
+**MVP 状态：**Hysteria2 的租约、ACK、踢线保持原样；VLESS-Reality 先做 3 天限时 PoC，撤销延迟以实测和需求变更记录为准。
 
 连接授权不是“后台返回一段带 expires_at 的静态配置”。服务器必须验证、过期并切断现存连接，否则凭据实际仍可永久使用。
 
@@ -268,6 +292,8 @@ VLESS/VMess/Trojan 由 Gateway Adapter 将租约转为独立身份并同步网�
 初始撤销目标：在线 Agent 收到撤销后 60 秒内结束对应会话；控制通道不可用时最多持续至当前租约到期。V1 应明确向运营展示这一最坏延迟。
 
 ## 12. 自动重连与 Kill Switch
+
+**MVP 状态：**客户端归属章节；Windows MVP 只做 Kill Switch 开/关，自动重连依客户端原型验证。
 
 ### 12.1 重连
 
@@ -292,6 +318,8 @@ UDP/QUIC 阻断时优先回退 TCP。单次尝试初始超时 8 秒，整轮最�
 保护规则应先于路由切换生效，切换国家、模式及核心更新期间也维持封锁。标准模式规则需在 Daemon 崩溃时继续有效；严格模式还要验证重启后到服务启动前的窗口，无法做到则不能验收“严格”。提供明确解除按钮和签名恢复工具，避免只能通过手改防火墙恢复。
 
 ## 13. Database Design
+
+**MVP 状态：**仅 PostgreSQL；现有事务配额和幂等会话保留，VLESS 只做向后兼容的协议字段迁移。Redis、outbox、KMS 后置。
 
 | 表 | 核心字段及约束 |
 | --- | --- |
@@ -318,6 +346,8 @@ Redis 保存目录缓存、限流计数、短期健康评分和事件通知。�
 协议秘密使用 KMS/密钥封装加密，凭据摘要用于校验；public_params 不包含私钥。核心所需明文只出现在授权响应和受限运行环境，不在 API trace、审计、Redis 通用缓存中出现。备份加密并定期恢复验证。
 
 ## 14. API Design
+
+**MVP 状态：**现有 API 契约见 `docs/API.md`；VLESS 接入时由服务端补单候选字段和“协议回退”顺序、错误码及样例，保持 Hysteria2 客户端兼容。
 
 外部用户访问 `/v1` 应由独立 Nginx/Cloudflare 等边缘层提供 HTTPS，应用服务只监听内网 HTTP；客户端使用身份访问令牌，设备敏感操作增加设备证明。认证端点由 OIDC 服务负责，控制面验证 issuer、audience、期限和设备状态。
 
@@ -369,6 +399,8 @@ Redis 保存目录缓存、限流计数、短期健康评分和事件通知。�
 
 ## 15. Security Design 与隐私
 
+**MVP 状态：**保留设备 Ed25519、令牌轮换、私网 Agent 令牌和外部 HTTPS；RBAC/MFA、平滑密钥轮换及通用遥测后置。
+
 主要威胁为本地 IPC 被滥用、UI 注入造成提权、核心/规则供应链篡改、连接凭据泄漏、订阅绕过、撤销遗漏和系统网络残留。
 
 - 普通 UI、受限 IPC、特权服务、核心进程之间保持可审计边界；核心只获得所需网络权限。无法去除的特权作为明确风险评估。
@@ -381,6 +413,8 @@ Redis 保存目录缓存、限流计数、短期健康评分和事件通知。�
 - 诊断包先本地脱敏并显示包含项，由用户主动导出；不自动上传。凭据泄漏时必须撤销租约和身份，不只清理日志。
 
 ## 16. Update Design
+
+**MVP 状态：**客户端先用现成更新机制，服务端已有签名文档接口冻结扩展；独立制品和多层签名更新留待 V1。
 
 客户端、核心、规则使用独立版本号和兼容矩阵，发布清单至少包含 kind、version、schema_version、platform、arch、size、hash、signature、min_daemon_version、min_core_version、channel 和 rollout。
 
@@ -400,11 +434,15 @@ Tauri updater 要求更新签名；它不替代 Go 特权服务、驱动和规�
 
 ## 17. 日志、诊断与故障定位
 
+**MVP 状态：**服务端只保留授权延迟、租约数量和网关健康等最小指标；客户端崩溃上报不新建控制面平台。
+
 诊断执行分层检查：物理网络/门户认证 → 外部边缘层 TLS → 服务权限及 IPC → QUIC/TCP 候选协议 → 核心存活 → TUN/路由 → DNS → 隧道出口。检测结果返回稳定错误码和用户可执行的动作。
 
 公共 Wi-Fi 门户环境显示需先完成网络登录；严格模式不会自动解除保护。诊断自身使用允许的测试地址，不读取浏览器历史或 DNS 查询历史。为区分用户本地故障和平台故障，管理侧监控授权延迟、Agent 同步延迟、活跃租约、网关握手及探测结果，不收集用户目标站点。
 
 ## 18. Testing Strategy 与验收
+
+**MVP 状态：**Windows 单平台端到端闭环为验收门槛；容器健康和服务端单测不能替代 UDP 阻断回退、撤销及断开恢复实测。
 
 业务单元测试覆盖状态机取消/乱序、评分、能力过滤、租约期限、并发配额、规则优先级和脱敏。契约测试覆盖 IPC/OpenAPI/schema、核心配置生成、Agent 授权 ACK 与重复撤销。网络与权限相关行为必须在真实 OS 或有相应能力的 VM 上验证，不能只用 mock 判定通过。
 
@@ -429,6 +467,8 @@ Tauri updater 要求更新签名；它不替代 Go 特权服务、驱动和规�
 发布门禁为 Windows PASS、macOS PASS、Linux PASS，且安全/恢复/授权测试全部通过。严格 Kill Switch 与临时授权不能仅依据 UI 显示或配置字段验收。
 
 ## 19. Release Strategy 与项目组织
+
+**MVP 状态：**先邀请制 Windows 内测，macOS/Linux 和商业化发布流程留待 V1。
 
 建议 monorepo：
 
@@ -462,6 +502,8 @@ Windows 使用签名安装器部署桌面端、服务与所需驱动；macOS 使
 
 ## 20. 开发阶段与交付门禁
 
+**MVP 状态：**本节旧 M0–M7 为 V1 蓝图；服务端执行 S0 供货、S1 VLESS PoC、S2 接入/联调、S3 第二国家节点，详见服务端 MVP 设计。
+
 | 阶段 | 主要交付 | 退出条件 |
 | --- | --- | --- |
 | M0 技术设计及原型 | 本文、ADR、三平台 TUN/DNS/防火墙恢复原型、服务器凭据授权 PoC、许可记录 | 关键风险逐项有实证；不把文档完成视为验证完成 |
@@ -477,6 +519,8 @@ M2 可用模拟控制面开发，但服务器临时授权原型必须先完成�
 
 ## 21. 待验证决策与主要风险
 
+**MVP 状态：**优先验证 Windows 网络原型、VLESS 现存流撤销上界、跨机 WireGuard 和边缘层 `Date` 头；其余风险按 V1 排队。
+
 | 项目 | 本文推荐 | 必须完成的验证/决策 |
 | --- | --- | --- |
 | macOS 接管 | 首版官网分发 helper + utun | 路由/DNS 恢复、PF 严格封锁、签名安装；失败则评估 Network Extension |
@@ -491,5 +535,7 @@ M2 可用模拟控制面开发，但服务器临时授权原型必须先完成�
 这些项目前可按推荐方向推进原型，不需要为了例行实现选择中断工作。但在验证失败、需要降低需求或改变支持范围时，必须先修订技术方案/需求记录。进入正式开发的依据应是“设计 + 风险验证结果”，进入发布的依据应是三平台完整用户闭环和故障恢复证据。
 
 ## 部署边界修订（2026-10-06）
+
+**MVP 状态：**继续有效：应用不终止公网 HTTPS，Nginx/Cloudflare 负责边缘层；协议网关按各自协议处理加密握手，Agent 控制接口只走受控私网。
 
 根据部署要求，应用仓库不再内置 Caddy，也不在 Go 应用进程中终止 HTTPS。公开 API 默认只在宿主机回环地址提供 HTTP；公网 HTTPS 由独立的 Nginx/Cloudflare 层负责。网关控制接口默认仅在 Compose 网络可达，采用每网关独立令牌认证。跨主机部署必须放在加密私网内，或经外部 TLS 终止层接入，不得把令牌在公网明文传输。Hysteria2 协议本身仍需 TLS 证书完成加密握手。
