@@ -1,7 +1,22 @@
 #!/bin/sh
 set -eu
 
-domain=lightflow-gw.aibusinesses.cc
+script=$(readlink -f -- "$0")
+root=$(dirname -- "$(dirname -- "$script")")
+cd "$root"
+
+domain=${GATEWAY_CERT_DOMAIN:-}
+if [ -z "$domain" ]; then
+  domain=$(sed -n 's/^GATEWAY_CERT_DOMAIN=//p' .env | tail -n 1)
+fi
+if [ -z "$domain" ]; then
+  domain=$(sed -n 's/^GATEWAY_HOST=//p' .env | tail -n 1)
+fi
+case "$domain" in
+  ''|localhost|127.*|*[!A-Za-z0-9.-]*|*..*|.*|*.)
+    echo 'Set GATEWAY_CERT_DOMAIN to the public gateway DNS name.' >&2
+    exit 2 ;;
+esac
 if [ -n "${RENEWED_DOMAINS:-}" ]; then
   case " ${RENEWED_DOMAINS} " in
     *" ${domain} "*) ;;
@@ -24,10 +39,6 @@ else
   echo 'Usage: deploy_gateway_certificate.sh CERT KEY | CERTBOT_LINEAGE' >&2
   exit 2
 fi
-
-script=$(readlink -f -- "$0")
-root=$(dirname -- "$(dirname -- "$script")")
-cd "$root"
 
 if ! openssl x509 -in "$cert" -noout -checkhost "$domain" >/dev/null; then
   echo "Gateway certificate does not cover $domain." >&2

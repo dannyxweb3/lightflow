@@ -1,13 +1,13 @@
 # Lightflow 生产服务端重部署
 
-本流程用于已有数据的 `/path/to/lightflow` 部署。控制面、数据库和网关仍由 `compose.yaml` 管理；Nginx/Cloudflare 在应用外层处理公开 HTTPS。不要在已有部署重新运行 `scripts/init.py`，也不要使用 `docker compose down -v`：两者分别会冲突现有密钥和删除数据库卷。
+本流程用于已有数据的生产部署。控制面、数据库和网关仍由 `compose.yaml` 管理；Nginx/Cloudflare 在应用外层处理公开 HTTPS。仓库不记录实际域名、服务器地址、SSH 端口或部署目录。以下命令以 `$DEPLOY_DIR`、`$API_DOMAIN`、`$GATEWAY_DOMAIN` 表示由运维在服务器会话中设置的值。不要在已有部署重新运行 `scripts/init.py`，也不要使用 `docker compose down -v`：两者分别会冲突现有密钥和删除数据库卷。
 
 ## 目标状态
 
 | 入口 | 地址 | 说明 |
 | --- | --- | --- |
-| 客户端 API | `https://lightflow.aibusinesses.cc` | Nginx 终止 HTTPS，仅代理 `/v1/*` 和 `/readyz` 到 `127.0.0.1:9010` |
-| Hysteria2 网关 | `lightflow-gw.aibusinesses.cc:4433/udp` | Cloudflare DNS 设为“仅 DNS”，客户端直连；网关证书 SAN 与 SNI 均为该域名 |
+| 客户端 API | `https://<API_DOMAIN>` | Nginx 终止 HTTPS，仅代理 `/v1/*` 和 `/readyz` 到 `127.0.0.1:9010` |
+| Hysteria2 网关 | `<GATEWAY_DOMAIN>:<UDP_PORT>/udp` | Cloudflare DNS 设为“仅 DNS”，客户端直连；网关证书 SAN 与 SNI 均为该域名 |
 | 管理后台 | 受控 HTTPS 管理入口 `/console/` | 不在公开 API 主机名上转发 `/console/*`、`/admin/*`、`/metrics` 或 `/internal/*` |
 | 数据库和内部控制 | `postgres:9011`、`control:9012` | 仅容器网络；不开放公网端口 |
 
@@ -15,10 +15,13 @@ Cloudflare 的普通 HTTP 代理不转发此网关的 UDP 服务，所以网关�
 
 ## 重部署前检查和备份
 
-在生产服务器上以有 Docker 权限的用户执行；以下假定已有配置位于 `/path/to/lightflow`：
+在生产服务器上以有 Docker 权限的用户执行，先在**当前会话**中设置实际值（不要把赋值命令提交到仓库）：
 
 ```bash
-cd /path/to/lightflow
+export DEPLOY_DIR=/实际部署目录
+export API_DOMAIN=实际控制面域名
+export GATEWAY_DOMAIN=实际网关域名
+cd "$DEPLOY_DIR"
 pwd
 git status --short --branch
 docker compose config --quiet
@@ -31,12 +34,12 @@ tar -czf .local/backups/config-before-redeploy.tgz .env .local/certs .local/sign
 
 备份包包含私钥和管理员凭据，只保留在受控位置，并另做加密离机备份。记录当前提交 `git rev-parse HEAD`，确认数据库备份非空。现有 `.env`、`.local`、Compose 卷及管理员账号均应保留；代码更新不会自动改已登记节点的 `host` 或 `server_name`。
 
-生产环境的账号密码和 `.env` 曾被复制到聊天中，应安排凭据轮换。`POSTGRES_PASSWORD` 需要与数据库角色密码协调修改；`CREDENTIAL_KEY` 和 `SIGNING_KEY` 不能仅改环境变量，否则会影响租约验证或客户端信任。先完成连通性恢复，再按维护窗口制定这些密钥的轮换步骤。
+如生产凭据曾通过不受控渠道共享，应安排凭据轮换。`POSTGRES_PASSWORD` 需要与数据库角色密码协调修改；`CREDENTIAL_KEY` 和 `SIGNING_KEY` 不能仅改环境变量，否则会影响租约验证或客户端信任。先完成连通性恢复，再按维护窗口制定这些密钥的轮换步骤。
 
 ## 更新代码和控制面
 
 ```bash
-cd /path/to/lightflow
+cd "$DEPLOY_DIR"
 git pull --ff-only origin main
 docker compose config --quiet
 docker compose build control gateway
@@ -48,12 +51,14 @@ curl --fail http://127.0.0.1:9010/readyz
 
 ## 给网关安装公网域名证书
 
-先在 Cloudflare 检查 `lightflow-gw.aibusinesses.cc` 的 A/AAAA 记录指向网关公网地址且为“仅 DNS”，放行到网关的 UDP 4433。**优先复用你在 Nginx 层已有的公网可信证书**，前提是证书 SAN 覆盖 `lightflow-gw.aibusinesses.cc`（或有效通配符），并且能取得对应私钥和完整证书链。只覆盖 API 域名 `lightflow.aibusinesses.cc` 的证书不能直接用于网关；Cloudflare Origin CA 证书也不能被直连的 Windows 客户端默认信任。
+先在 Cloudflare 检查网关域名的 A/AAAA 记录指向网关公网地址且为“仅 DNS”，放行到网关的 UDP 端口。**优先复用在 Nginx 层已有的公网可信证书**，前提是证书 SAN 覆盖网关域名（或有效通配符），并且能取得对应私钥和完整证书链。只覆盖 API 域名的证书不能直接用于网关；Cloudflare Origin CA 证书也不能被直连的 Windows 客户端默认信任。
+
+证书脚本从本机 `.env` 的 `GATEWAY_CERT_DOMAIN`（优先）或 `GATEWAY_HOST` 读取目标域名；首次执行前在未入库的 `.env` 设置 `GATEWAY_CERT_DOMAIN=<实际网关域名>`。该值只用于证书核对，不能代替随后更新数据库中已登记节点的地址。
 
 假设现有 Nginx 证书和私钥分别位于下面两条路径，把它们替换为实际路径后执行：
 
 ```bash
-cd /path/to/lightflow
+cd "$DEPLOY_DIR"
 scripts/deploy_gateway_certificate.sh /path/to/nginx/fullchain.pem /path/to/nginx/privkey.pem
 ```
 
@@ -62,14 +67,14 @@ scripts/deploy_gateway_certificate.sh /path/to/nginx/fullchain.pem /path/to/ngin
 如果现有证书不覆盖网关域名，才需要为网关另行签发。若生产 Nginx 可处理该域名的 HTTP-01 验证，可使用 [Certbot 官方说明](https://certbot.eff.org/instructions?os=ubuntubionic&tab=standard&ws=nginx)安装插件，再执行：
 
 ```bash
-certbot certonly --nginx --cert-name lightflow-gw.aibusinesses.cc -d lightflow-gw.aibusinesses.cc
-scripts/deploy_gateway_certificate.sh /etc/letsencrypt/live/lightflow-gw.aibusinesses.cc
+certbot certonly --nginx --cert-name "$GATEWAY_DOMAIN" -d "$GATEWAY_DOMAIN"
+scripts/deploy_gateway_certificate.sh "/etc/letsencrypt/live/$GATEWAY_DOMAIN"
 ```
 
 无论复用还是新签发，只要网关证书由 Certbot 管理，就设置续期后的重新部署钩子，并验证续期配置：
 
 ```bash
-ln -sfn /path/to/lightflow/scripts/deploy_gateway_certificate.sh \
+ln -sfn "$DEPLOY_DIR/scripts/deploy_gateway_certificate.sh" \
   /etc/letsencrypt/renewal-hooks/deploy/lightflow-gateway.sh
 certbot renew --dry-run
 ```
@@ -81,8 +86,8 @@ certbot renew --dry-run
 确认新网关容器健康后，运行：
 
 ```bash
-cd /path/to/lightflow
-python3 scripts/set_gateway_address.py --host lightflow-gw.aibusinesses.cc --server-name lightflow-gw.aibusinesses.cc --port 4433
+cd "$DEPLOY_DIR"
+python3 scripts/set_gateway_address.py --host "$GATEWAY_DOMAIN" --server-name "$GATEWAY_DOMAIN" --port 4433
 ```
 
 脚本从本机 `.env` 读取管理密钥，不打印密钥；先检查已安装证书的 SAN，再用管理 API 更新数据库中的 `host`、`server_name`、`port`，同步 `.env`，等待网关重新就绪。同值重跑不会再次提交 PATCH。地址或 SNI 变更会撤销该节点的现有租约，客户端须重新申请。只改 `.env`、只重启容器或重跑 `bootstrap.py` 都不会修复已有数据库记录。
@@ -92,11 +97,11 @@ python3 scripts/set_gateway_address.py --host lightflow-gw.aibusinesses.cc --ser
 ```bash
 docker compose ps
 curl --fail http://127.0.0.1:9010/readyz
-curl --fail https://lightflow.aibusinesses.cc/readyz
-openssl x509 -in .local/certs/gateway.crt -noout -checkhost lightflow-gw.aibusinesses.cc
+curl --fail "https://$API_DOMAIN/readyz"
+openssl x509 -in .local/certs/gateway.crt -noout -checkhost "$GATEWAY_DOMAIN"
 ```
 
-确认新租约返回 `host=lightflow-gw.aibusinesses.cc`、`port=4433`、`public_params.server_name=lightflow-gw.aibusinesses.cc`，再用 Windows 客户端完成真实 Hysteria2 QUIC/UDP 握手、激活和续租。`Test-NetConnection` 只测 TCP，不能证明 UDP 4433 可用。检查公开 API 主机名上的 `/admin/*`、`/console/*`、`/internal/*` 和 `/metrics` 被边缘层拒绝。
+确认新租约返回 `host=<GATEWAY_DOMAIN>`、实际 UDP 端口、`public_params.server_name=<GATEWAY_DOMAIN>`，再用 Windows 客户端完成真实 Hysteria2 QUIC/UDP 握手、激活和续租。`Test-NetConnection` 只测 TCP，不能证明 UDP 可用。检查公开 API 主机名上的 `/admin/*`、`/console/*`、`/internal/*` 和 `/metrics` 被边缘层拒绝。
 
 客户端配置和完整验收流程见 [Windows 客户端连接生产环境](CLIENT_PRODUCTION.md)。
 
