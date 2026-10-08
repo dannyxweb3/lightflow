@@ -24,6 +24,7 @@ curl --fail http://127.0.0.1:9010/readyz
 管理后台位于 `http://127.0.0.1:9010/console/`，初始密码在 `.local/admin-console.json`。已有 `.env` 的部署先运行 `python3 scripts/init_admin.py` 并重建 control。后台只适合本机、SSH 隧道或受控管理入口；外部 HTTPS 仍由 Nginx/Cloudflare 处理。
 
 - [部署、外层 HTTPS、备份和升级](docs/DEPLOYMENT.md)
+- [服务端 MVP 重新设计与改进计划](docs/SERVER_MVP_REDESIGN.md)
 - [生产服务端重部署](docs/PRODUCTION_REDEPLOY.md)
 - [Windows 客户端连接生产环境](docs/CLIENT_PRODUCTION.md)
 - [API、设备签名与客户端接入](docs/API.md)
