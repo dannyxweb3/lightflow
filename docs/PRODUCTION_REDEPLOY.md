@@ -38,6 +38,16 @@ tar -czf .local/backups/config-before-redeploy.tgz .env .local/certs .local/sign
 
 ## 更新代码和控制面
 
+如果服务器上的克隆还停留在历史清理前的提交，普通 `git pull --ff-only` 会提示无法快进。先确认 `git status --short` 没有需要保留的**已跟踪文件**修改，并备份需要保留的本地改动，再执行一次：
+
+```bash
+cd "$DEPLOY_DIR"
+git fetch origin main
+git reset --hard origin/main
+```
+
+`git reset --hard` 会丢弃已跟踪文件的本地修改；被 Git 忽略的 `.env`、`.local/` 和 Docker 数据卷不会因此删除。已经同步到清理后历史的克隆以后继续使用常规 `git pull --ff-only`。
+
 ```bash
 cd "$DEPLOY_DIR"
 git pull --ff-only origin main
