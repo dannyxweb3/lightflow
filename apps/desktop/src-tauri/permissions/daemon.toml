@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-daemon-request"
+description = "Call the typed Nimbus local daemon bridge"
+commands.allow = ["daemon_request"]

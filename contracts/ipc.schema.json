@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:nimbus:ipc:v1",
+  "title": "Nimbus Windows development IPC v1",
+  "oneOf": [{ "$ref": "#/$defs/request" }, { "$ref": "#/$defs/response" }],
+  "$defs": {
+    "settings": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mode", "transport_preference", "allow_lan"],
+      "properties": {
+        "mode": { "enum": ["smart", "global", "direct"] },
+        "transport_preference": { "enum": ["auto", "quic", "tcp"] },
+        "allow_lan": { "type": "boolean" }
+      }
+    },
+    "request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["api_version", "request_id", "method", "params"],
+      "properties": {
+        "api_version": { "const": 1 },
+        "request_id": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "method": { "enum": ["get_snapshot", "connect", "disconnect", "update_settings"] },
+        "params": { "type": "object" }
+      },
+      "allOf": [
+        { "if": { "properties": { "method": { "enum": ["get_snapshot", "disconnect"] } } }, "then": { "properties": { "params": { "maxProperties": 0 } } } },
+        { "if": { "properties": { "method": { "const": "connect" } } }, "then": { "properties": { "params": { "type": "object", "additionalProperties": false, "properties": { "country_code": { "enum": ["", "SG", "JP", "US", "DE", "AU", "GB"] } } } } } },
+        { "if": { "properties": { "method": { "const": "update_settings" } } }, "then": { "properties": { "params": { "$ref": "#/$defs/settings" } } } }
+      ]
+    },
+    "snapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["instance_id", "sequence", "state", "country_code", "operation_id", "simulation", "daemon_version", "settings", "countries"],
+      "properties": {
+        "instance_id": { "type": "string", "minLength": 1 },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "state": { "enum": ["disconnected", "authorizing", "preparing", "connecting", "verifying", "connected"] },
+        "country_code": { "type": "string" },
+        "operation_id": { "type": "string" },
+        "connected_at": { "type": "string", "format": "date-time" },
+        "simulation": { "type": "boolean" },
+        "daemon_version": { "type": "string" },
+        "settings": { "$ref": "#/$defs/settings" },
+        "countries": { "type": "array", "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["code", "name", "city", "latency_ms"],
+          "properties": { "code": { "type": "string" }, "name": { "type": "string" }, "city": { "type": "string" }, "latency_ms": { "type": "integer", "minimum": 0 } }
+        } }
+      }
+    },
+    "response": {
+      "type": "object", "additionalProperties": false,
+      "required": ["api_version", "request_id"],
+      "properties": {
+        "api_version": { "const": 1 }, "request_id": { "type": "string" },
+        "result": { "$ref": "#/$defs/snapshot" },
+        "error": { "type": "object", "additionalProperties": false, "required": ["code"], "properties": { "code": { "type": "string" } } }
+      },
+      "oneOf": [{ "required": ["result"], "not": { "required": ["error"] } }, { "required": ["error"], "not": { "required": ["result"] } }]
+    }
+  }
+}

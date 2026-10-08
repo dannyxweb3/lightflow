@@ -1,0 +1,13 @@
+node_modules/
+dist/
+target/
+bin/
+.env
+.local/
+.env.*
+!.env.example
+*.log
+*.exe
+.DS_Store
+coverage/
+test-results/

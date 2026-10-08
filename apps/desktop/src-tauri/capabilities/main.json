@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Local Nimbus main window; no filesystem, shell or remote capabilities",
+  "windows": ["main"],
+  "permissions": ["allow-daemon-request"]
+}
