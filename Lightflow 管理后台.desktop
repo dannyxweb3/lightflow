@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Lightflow 管理后台
+Comment=在浏览器中打开生产管理后台
+Exec=xdg-open https://lightflow.aibusinesses.cc/console/
+Icon=web-browser
+Terminal=false
+Categories=Network;WebBrowser;
