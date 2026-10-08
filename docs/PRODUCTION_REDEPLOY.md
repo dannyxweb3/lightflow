@@ -48,18 +48,25 @@ curl --fail http://127.0.0.1:9010/readyz
 
 ## 给网关安装公网域名证书
 
-先在 Cloudflare 检查 `lightflow-gw.aibusinesses.cc` 的 A/AAAA 记录指向网关公网地址且为“仅 DNS”，放行到网关的 UDP 4433。检查是否已有覆盖该域名且客户端信任的证书；若没有，且生产 Nginx 可处理该域名的 HTTP-01 验证，可使用：
+先在 Cloudflare 检查 `lightflow-gw.aibusinesses.cc` 的 A/AAAA 记录指向网关公网地址且为“仅 DNS”，放行到网关的 UDP 4433。**优先复用你在 Nginx 层已有的公网可信证书**，前提是证书 SAN 覆盖 `lightflow-gw.aibusinesses.cc`（或有效通配符），并且能取得对应私钥和完整证书链。只覆盖 API 域名 `lightflow.aibusinesses.cc` 的证书不能直接用于网关；Cloudflare Origin CA 证书也不能被直连的 Windows 客户端默认信任。
+
+假设现有 Nginx 证书和私钥分别位于下面两条路径，把它们替换为实际路径后执行：
+
+```bash
+cd /path/to/lightflow
+scripts/deploy_gateway_certificate.sh /path/to/nginx/fullchain.pem /path/to/nginx/privkey.pem
+```
+
+脚本内部使用 `openssl x509 -checkhost` **读取并检查**证书覆盖的域名，不会签发新证书；还检查证书与私钥匹配。然后将证书链和私钥复制到 Compose 挂载路径，强制重建并等待 `gateway` 健康。Nginx 现有证书保持原位。Nginx 上已经安装证书并不等于 gateway 容器也在使用它，两处服务必须分别读取自己的证书文件。
+
+如果现有证书不覆盖网关域名，才需要为网关另行签发。若生产 Nginx 可处理该域名的 HTTP-01 验证，可使用 [Certbot 官方说明](https://certbot.eff.org/instructions?os=ubuntubionic&tab=standard&ws=nginx)安装插件，再执行：
 
 ```bash
 certbot certonly --nginx --cert-name lightflow-gw.aibusinesses.cc -d lightflow-gw.aibusinesses.cc
-openssl x509 -in /etc/letsencrypt/live/lightflow-gw.aibusinesses.cc/fullchain.pem \
-  -noout -checkhost lightflow-gw.aibusinesses.cc
 scripts/deploy_gateway_certificate.sh /etc/letsencrypt/live/lightflow-gw.aibusinesses.cc
 ```
 
-`certonly --nginx` 只签发证书；仓库脚本检查证书域名和私钥配对，复制 `fullchain.pem`/`privkey.pem` 到 Compose 挂载路径，再强制重建并等待 `gateway` 健康。它不会修改 Nginx 的正式站点配置。若生产环境未安装 Certbot/Nginx 插件，先按 [Certbot 官方说明](https://certbot.eff.org/instructions?os=ubuntubionic&tab=standard&ws=nginx) 安装；不要通过关闭客户端证书校验绕过签发问题。
-
-设置续期后的重新部署钩子，并验证续期配置：
+无论复用还是新签发，只要网关证书由 Certbot 管理，就设置续期后的重新部署钩子，并验证续期配置：
 
 ```bash
 ln -sfn /path/to/lightflow/scripts/deploy_gateway_certificate.sh \
@@ -67,7 +74,7 @@ ln -sfn /path/to/lightflow/scripts/deploy_gateway_certificate.sh \
 certbot renew --dry-run
 ```
 
-钩子只处理包含网关域名的成功续期；手动执行一次上面的部署脚本已验证证书复制和容器重建。Certbot `--deploy-hook` / deploy-hook 目录仅在成功签发或续期后运行；`--dry-run` 主要验证续期挑战，不代替网关实际握手验证。[Certbot 续期钩子说明](https://eff-certbot.readthedocs.io/en/stable/using.html#renewal)。
+钩子只处理包含网关域名的成功续期；手动执行一次上面的部署脚本已验证证书复制和容器重建。Certbot `--deploy-hook` / deploy-hook 目录仅在成功签发或续期后运行；`--dry-run` 主要验证续期挑战，不代替网关实际握手验证。[Certbot 续期钩子说明](https://eff-certbot.readthedocs.io/en/stable/using.html#renewal)。如果 Nginx 证书由其他工具续期，应在那个工具的续期成功钩子里重新调用 `scripts/deploy_gateway_certificate.sh 证书链路径 私钥路径`，避免网关继续使用过期的复制件。
 
 ## 更新已登记节点
 
