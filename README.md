@@ -29,7 +29,7 @@ curl --fail http://127.0.0.1:9010/readyz
 - [生产服务端重部署](docs/PRODUCTION_REDEPLOY.md)
 - [Windows 客户端连接生产环境](docs/CLIENT_PRODUCTION.md)
 - [API、设备签名与客户端接入](docs/API.md)
-- [Windows 宿主机内网联调](docs/WINDOWS_LAN.md)
+- [Windows 宿主机 S0 内网联调](docs/WINDOWS_LAN.md)
 - [管理后台功能文档](docs/ADMIN_CONSOLE.md)
 - [实现范围、设计取舍和验收](docs/IMPLEMENTATION.md)
 - [OpenAPI 契约](docs/openapi.json)
