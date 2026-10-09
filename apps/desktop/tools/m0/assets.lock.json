@@ -1,0 +1,16 @@
+{
+  "core_version": "v1.19.32",
+  "assets": [
+    {"name":"mihomo-v1.19.32.zip","url":"https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-windows-amd64-v1.19.32.zip","sha256":"1ac84e795b5b915446e20139677fb6cc013a0778e876e8d4c96f994750b4c4a3"},
+    {"name":"geoip.dat","url":"https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat","sha256":"116cc0f03d48991962f7f9cdbbcf53d45d89777f9c3cd1a663210853e5df6093"},
+    {"name":"geosite.dat","url":"https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat","sha256":"b697cf0728afa1757297d528a83b5c2270ec06652cee5b788353bc246d6b2cd3"}
+  ],
+  "core_executable_sha256": "beb9878924d7bd38c67176b441ab5e668cc378bfe751c8dc8fef3eb5aaf566d5",
+  "embedded_driver": {
+    "version": "Wintun 0.14.1",
+    "source_dependency": "github.com/metacubex/sing-tun v0.4.27",
+    "url": "https://www.wintun.net/builds/wintun-0.14.1.zip",
+    "archive_sha256": "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51",
+    "amd64_dll_sha256": "e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce"
+  }
+}

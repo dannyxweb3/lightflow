@@ -1,0 +1,29 @@
+{
+  "ipv6": true,
+  "tun": {
+    "enable": true,
+    "device": "REPLACED_BY_RUNNER",
+    "stack": "gvisor",
+    "mtu": 1500,
+    "auto-route": true,
+    "strict-route": true,
+    "auto-detect-interface": true,
+    "inet4-address": ["198.18.0.1/30"],
+    "inet6-address": ["fdfe:dcba:9876::1/126"],
+    "route-address": ["0.0.0.0/0", "::/0"],
+    "route-exclude-address": ["192.168.194.128/32"],
+    "dns-hijack": ["any:53", "tcp://any:53"]
+  },
+  "dns": {
+    "enable": true,
+    "listen": "",
+    "ipv6": false,
+    "enhanced-mode": "fake-ip",
+    "fake-ip-range": "198.18.0.1/16",
+    "respect-rules": true,
+    "default-nameserver": ["https://1.1.1.1/dns-query"],
+    "proxy-server-nameserver": ["https://1.1.1.1/dns-query"],
+    "nameserver": ["https://1.1.1.1/dns-query"],
+    "fake-ip-filter": ["*.lan", "localhost"]
+  }
+}

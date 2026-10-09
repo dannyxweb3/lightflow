@@ -26,19 +26,24 @@ import (
 )
 
 type APIError struct {
-	Code   string
-	Status int
+	Code      string
+	Status    int
+	RequestID string
 }
 
 func (e *APIError) Error() string { return fmt.Sprintf("%s (HTTP %d)", e.Code, e.Status) }
 
 type Client struct {
-	base     *url.URL
-	http     *http.Client
-	token    string
-	deviceID string
-	key      ed25519.PrivateKey
+	base         *url.URL
+	http         *http.Client
+	token        string
+	deviceID     string
+	key          ed25519.PrivateKey
+	responseDate time.Time
 }
+
+// ResponseDate exposes only the last HTTPS Date, for isolated clock diagnostics.
+func (c *Client) ResponseDate() time.Time { return c.responseDate }
 
 type Candidate struct {
 	EndpointID   string `json:"endpoint_id"`
@@ -138,8 +143,20 @@ func (c *Client) DeleteDevice(ctx context.Context) error {
 }
 
 func (c *Client) Create(ctx context.Context, idempotencyKey string) (Plan, error) {
+	return c.CreateMode(ctx, idempotencyKey, "global")
+}
+
+// CreateMode is used by the isolated client prototype; retries keep identical bytes.
+func (c *Client) CreateMode(ctx context.Context, idempotencyKey, mode string) (Plan, error) {
+	if mode != "global" && mode != "smart" {
+		return Plan{}, errors.New("INVALID_CONNECTION_MODE")
+	}
 	// The body remains byte-identical across pending retries; nonce/signature do not.
-	body := []byte(`{"country_code":"SG","mode":"global","protocols":["hysteria2"]}`)
+	body, _ := json.Marshal(struct {
+		Country   string   `json:"country_code"`
+		Mode      string   `json:"mode"`
+		Protocols []string `json:"protocols"`
+	}{"SG", mode, []string{"hysteria2"}})
 	return c.plan(ctx, "POST", "/v1/connection-sessions", body, idempotencyKey)
 }
 
@@ -191,6 +208,7 @@ func (c *Client) plan(ctx context.Context, method, path string, body []byte, ide
 }
 
 var safeCode = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
+var safeRequestID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
 func (c *Client) call(ctx context.Context, method, path string, body []byte, signed bool, idempotency string, out any) (int, time.Duration, error) {
 	endpoint := *c.base
@@ -238,6 +256,7 @@ func (c *Client) call(ctx context.Context, method, path string, body []byte, sig
 		return 0, 0, errors.New("CONTROL_REQUEST_FAILED")
 	}
 	defer response.Body.Close()
+	c.responseDate, _ = http.ParseTime(response.Header.Get("Date"))
 	data, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
 	if err != nil || len(data) > 1<<20 {
 		return response.StatusCode, 0, errors.New("INVALID_RESPONSE_SIZE")
@@ -250,7 +269,11 @@ func (c *Client) call(ctx context.Context, method, path string, body []byte, sig
 		if !safeCode.MatchString(failure.Code) {
 			failure.Code = "API_ERROR"
 		}
-		return response.StatusCode, 0, &APIError{Code: failure.Code, Status: response.StatusCode}
+		requestID := response.Header.Get("X-Request-ID")
+		if !safeRequestID.MatchString(requestID) {
+			requestID = ""
+		}
+		return response.StatusCode, 0, &APIError{Code: failure.Code, Status: response.StatusCode, RequestID: requestID}
 	}
 	if out != nil && len(data) != 0 {
 		if json.Unmarshal(data, out) != nil {

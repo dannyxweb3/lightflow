@@ -28,6 +28,30 @@ func TestCanonicalProofEmptyBodyAndEscapedPath(t *testing.T) {
 	}
 }
 
+func TestCreateModeUsesRequestedModeAndRejectsInvalidBeforeRequest(t *testing.T) {
+	_, key, _ := ed25519.GenerateKey(rand.Reader)
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		calls++
+		var body struct {
+			Mode string `json:"mode"`
+		}
+		if json.NewDecoder(req.Body).Decode(&body) != nil || body.Mode != "smart" {
+			t.Error("requested mode lost")
+		}
+		json.NewEncoder(w).Encode(Plan{SchemaVersion: 1, LeaseID: "lease", DeviceID: "device", ExpiresAt: time.Now().Add(time.Minute), Candidates: []Candidate{{Protocol: "hysteria2"}}})
+	}))
+	defer server.Close()
+	base, _ := url.Parse(server.URL)
+	client := &Client{base: base, http: server.Client(), deviceID: "device", key: key}
+	if _, err := client.CreateMode(context.Background(), "0123456789abcdef", "smart"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.CreateMode(context.Background(), "0123456789abcdef", "direct"); err == nil || calls != 1 {
+		t.Fatal("invalid mode reached control plane")
+	}
+}
+
 func TestPendingRetryPreservesBodyAndKeyButChangesNonce(t *testing.T) {
 	public, private, _ := ed25519.GenerateKey(rand.Reader)
 	var bodies [][]byte

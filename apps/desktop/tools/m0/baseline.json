@@ -1,0 +1,18 @@
+{
+  "socks-port": 0,
+  "allow-lan": false,
+  "bind-address": "127.0.0.1",
+  "mode": "rule",
+  "log-level": "warning",
+  "ipv6": false,
+  "geodata-mode": true,
+  "geo-auto-update": false,
+  "external-controller": "",
+  "external-controller-pipe": "",
+  "profile": {"store-selected": false, "store-fake-ip": false},
+  "tun": {"enable": false},
+  "dns": {"enable": false},
+  "proxies": [],
+  "proxy-groups": [],
+  "rules": ["MATCH,LF-TUNNEL"]
+}
