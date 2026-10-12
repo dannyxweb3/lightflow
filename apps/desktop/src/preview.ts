@@ -18,6 +18,10 @@ export class PreviewClient {
   };
   async request(command: Command): Promise<Snapshot> {
     switch (command.method) {
+      case 'login':
+      case 'logout':
+      case 'refresh_account':
+        throw new Error('ACCOUNT_NOT_AVAILABLE');
       case 'connect': {
         if (this.snapshot.settings.mode === 'direct') throw new Error('DIRECT_MODE');
         if (this.snapshot.state !== 'disconnected') throw new Error('CONNECTION_BUSY');

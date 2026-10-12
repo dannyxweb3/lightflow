@@ -68,3 +68,35 @@ func TestCoreTCPStageDoesNotClaimTargetVerified(t *testing.T) {
 		t.Fatal("core TCP selection must not count as verified target forwarding")
 	}
 }
+
+func TestProductionRejectsCertificateAndTopologyBypass(t *testing.T) {
+	for _, vmware := range []bool{false, true} {
+		err := run(context.Background(), "https://control.example", "production-account.json", "global", true, false, false, false, false, false, false, !vmware, false, vmware, false, true, false)
+		if err == nil || err.Error() != "PRODUCTION_REJECTS_TEST_EXCEPTIONS" {
+			t.Fatal("production accepted a test exception")
+		}
+	}
+}
+
+func TestProductionTUNUsesCandidateAndSystemTrust(t *testing.T) {
+	t.Chdir("../../../..")
+	candidate := controlclient.Candidate{Protocol: "hysteria2", Transport: "quic", Host: "192.0.2.9", Port: 4433, Credential: "test-only"}
+	candidate.PublicParams.ServerName = "gateway.example"
+	raw, err := configuration(candidate, "global", "", `\\.\pipe\test`, 12345, "test-auth")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	json.Unmarshal(raw, &config)
+	if _, exists := config["tls"]; exists {
+		t.Fatal("system trust unexpectedly replaced")
+	}
+	raw, err = tunConfiguration(raw, "test-device")
+	if err != nil {
+		t.Fatal(err)
+	}
+	json.Unmarshal(raw, &config)
+	if config["tun"].(map[string]any)["route-exclude-address"].([]any)[0] != "192.0.2.9/32" || config["rules"].([]any)[0] != "IP-CIDR,192.0.2.9/32,DIRECT,no-resolve" {
+		t.Fatal("TUN exclusions do not match selected gateway")
+	}
+}

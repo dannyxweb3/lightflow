@@ -18,6 +18,30 @@ import (
 	"time"
 )
 
+func TestS0CertificateExceptionCannotReachOtherOrigins(t *testing.T) {
+	for _, origin := range []string{"https://example.com", "http://lightflow.u26d.local:8443", "https://lightflow.u26d.local:8443/extra"} {
+		if _, err := NewInsecureS0Test(origin); err == nil {
+			t.Fatal("test certificate exception escaped S0 allowlist")
+		}
+	}
+	strict, err := New("https://example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer strict.Close()
+	if strict.http.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("default client disables verification")
+	}
+	lab, err := NewInsecureS0Test("https://lightflow.u26d.local:8443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lab.Close()
+	if !lab.http.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("explicit test option not applied")
+	}
+}
+
 func TestCanonicalProofEmptyBodyAndEscapedPath(t *testing.T) {
 	const expected = "DELETE\n/v1/connection-sessions/a%2Fb\n1791273600\n0123456789abcdef\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 	if actual := string(SigningBytes("delete", "/v1/connection-sessions/a%2Fb", "1791273600", "0123456789abcdef", nil)); actual != expected {

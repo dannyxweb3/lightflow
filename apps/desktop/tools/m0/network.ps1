@@ -30,7 +30,8 @@ try {
         [IO.File]::WriteAllText($baseline,(Snapshot))
         Write-Output 'NETWORK_BASELINE_RECORDED'
     } elseif ($Operation -eq 'Gateway') {
-        $gatewayRoute = @(Find-NetRoute -RemoteIPAddress '192.168.194.128')
+        if (-not [Net.IPAddress]::TryParse($TargetIP,[ref]([Net.IPAddress]$null))) { throw 'INVALID_TEST_IP' }
+        $gatewayRoute = @(Find-NetRoute -RemoteIPAddress $TargetIP)
         $gatewayAdapter = @(Get-NetAdapter | Where-Object { $_.ifIndex -eq $gatewayRoute[0].InterfaceIndex -and $_.Status -eq 'Up' -and $_.Name -ne $Device })
         if ($gatewayAdapter.Count -ne 1) { throw 'GATEWAY_INTERFACE_UNAVAILABLE' }
         [IO.File]::WriteAllText((Join-Path $directoryPath 'gateway-interface.txt'),$gatewayAdapter[0].Name)

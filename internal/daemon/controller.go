@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -54,6 +55,8 @@ type Snapshot struct {
 	Version     string    `json:"daemon_version"`
 	Settings    Settings  `json:"settings"`
 	Countries   []Country `json:"countries"`
+	LastError   string    `json:"last_error,omitempty"`
+	Account     *Account  `json:"account,omitempty"`
 }
 
 type ConnectParams struct {
@@ -68,14 +71,19 @@ type cached struct {
 // Controller owns all connection state. This milestone contains ONLY an explicit
 // development simulation. No core is launched and no system network is changed.
 type Controller struct {
-	mu          sync.Mutex
-	development bool
-	snapshot    Snapshot
-	generation  uint64
-	cancel      chan struct{}
-	cache       map[string]cached
-	cacheOrder  []string
-	step        time.Duration
+	mu            sync.Mutex
+	development   bool
+	snapshot      Snapshot
+	generation    uint64
+	cancel        chan struct{}
+	cache         map[string]cached
+	cacheOrder    []string
+	step          time.Duration
+	backend       Backend
+	realCancel    context.CancelFunc
+	realDone      chan struct{}
+	accountCancel context.CancelFunc
+	accountDone   chan struct{}
 }
 
 func New(development bool, step time.Duration) *Controller {
@@ -125,7 +133,7 @@ func (c *Controller) Handle(req Request) Response {
 	if req.APIVersion != APIVersion || len(req.RequestID) == 0 || len(req.RequestID) > 80 {
 		return fail("INVALID_REQUEST")
 	}
-	fingerprint := req.Method + ":" + string(req.Params)
+	fingerprint := requestFingerprint(req)
 	if req.Method != "get_snapshot" {
 		if previous, ok := c.cache[req.RequestID]; ok {
 			if previous.fingerprint != fingerprint {
@@ -134,15 +142,55 @@ func (c *Controller) Handle(req Request) Response {
 			return previous.response
 		}
 	}
-	if !c.development {
+	if !c.development && c.backend == nil {
 		return fail("NETWORK_ADAPTER_NOT_READY")
 	}
 	switch req.Method {
+	case "login", "logout", "refresh_account":
+		if c.snapshot.LastError == "NETWORK_RECOVERY_FAILED" {
+			return fail("NETWORK_RECOVERY_FAILED")
+		}
+		if _, ok := c.backend.(AccountBackend); !ok {
+			return fail("ACCOUNT_NOT_AVAILABLE")
+		}
+		if c.snapshot.Account.Busy {
+			return fail("ACCOUNT_BUSY")
+		}
+		var params struct {
+			Email    string `json:"email"`
+			Password string `json:"password"`
+		}
+		if req.Method == "login" {
+			if !decodeParams(req.Params, &params) || !validLogin(params.Email, params.Password) {
+				return fail("INVALID_PARAMS")
+			}
+			if c.snapshot.Account.Authenticated {
+				return fail("LOGOUT_BEFORE_LOGIN")
+			}
+		} else if !decodeParams(req.Params, &struct{}{}) {
+			return fail("INVALID_PARAMS")
+		}
+		if req.Method != "logout" && c.snapshot.State != "disconnected" {
+			return fail("DISCONNECT_BEFORE_ACCOUNT")
+		}
+		c.startAccountLocked(req.Method, params.Email, params.Password)
 	case "get_snapshot":
 		if !decodeParams(req.Params, &struct{}{}) {
 			return fail("INVALID_PARAMS")
 		}
 	case "connect":
+		if c.snapshot.Account != nil {
+			if c.snapshot.Account.Busy {
+				return fail("ACCOUNT_BUSY")
+			}
+			if !c.snapshot.Account.Authenticated {
+				return fail("LOGIN_REQUIRED")
+			}
+			expires, _ := time.Parse(time.RFC3339, c.snapshot.Account.ExpiresAt)
+			if !c.snapshot.Account.Enabled || !expires.After(time.Now()) {
+				return fail("SUBSCRIPTION_INACTIVE")
+			}
+		}
 		var params ConnectParams
 		if !decodeParams(req.Params, &params) {
 			return fail("INVALID_PARAMS")
@@ -150,11 +198,14 @@ func (c *Controller) Handle(req Request) Response {
 		if c.snapshot.Settings.Mode == "direct" {
 			return fail("DIRECT_MODE")
 		}
+		if c.backend != nil && c.snapshot.Settings.Transport == "tcp" {
+			return fail("TRANSPORT_NOT_AVAILABLE")
+		}
 		country := params.CountryCode
-		if country == "" {
+		if country == "" && c.backend == nil {
 			country = "SG"
 		}
-		found := false
+		found := country == "" && c.backend != nil
 		for _, available := range c.snapshot.Countries {
 			if available.Code == country {
 				found = true
@@ -169,8 +220,16 @@ func (c *Controller) Handle(req Request) Response {
 		c.generation++
 		c.cancel = make(chan struct{})
 		c.snapshot.CountryCode, c.snapshot.OperationID = country, newID()
+		c.snapshot.LastError = ""
 		c.setState("authorizing")
-		go c.simulate(c.generation, c.cancel)
+		if c.backend != nil {
+			ctx, cancel := context.WithCancel(context.Background())
+			c.realCancel = cancel
+			c.realDone = make(chan struct{})
+			go c.runReal(ctx, c.generation, c.snapshot.OperationID, country, c.snapshot.Settings, c.realDone)
+		} else {
+			go c.simulate(c.generation, c.cancel)
+		}
 	case "disconnect":
 		if !decodeParams(req.Params, &struct{}{}) {
 			return fail("INVALID_PARAMS")
@@ -190,13 +249,20 @@ func (c *Controller) Handle(req Request) Response {
 		if c.snapshot.State != "disconnected" {
 			return fail("DISCONNECT_BEFORE_SETTINGS")
 		}
+		if c.backend != nil && (params.Transport == "tcp" || !*params.AllowLAN) {
+			return fail("SETTING_NOT_AVAILABLE")
+		}
 		c.snapshot.Settings = Settings{Mode: params.Mode, Transport: params.Transport, AllowLAN: *params.AllowLAN}
 		c.snapshot.Sequence++
 	default:
 		return fail("UNKNOWN_METHOD")
 	}
 	snapshot := c.snapshot
-	snapshot.Countries = append([]Country(nil), c.snapshot.Countries...)
+	if snapshot.Account != nil {
+		account := *snapshot.Account
+		snapshot.Account = &account
+	}
+	snapshot.Countries = append([]Country{}, c.snapshot.Countries...)
 	response.Result = &snapshot
 	if req.Method != "get_snapshot" {
 		if len(c.cacheOrder) >= 256 {
@@ -234,6 +300,12 @@ func (c *Controller) simulate(generation uint64, cancel <-chan struct{}) {
 func (c *Controller) setState(state string) { c.snapshot.State = state; c.snapshot.Sequence++ }
 
 func (c *Controller) stopLocked() {
+	if c.backend != nil && c.realCancel != nil {
+		c.generation++
+		c.realCancel()
+		c.setState("disconnecting")
+		return
+	}
 	c.generation++
 	if c.cancel != nil {
 		close(c.cancel)
@@ -243,7 +315,22 @@ func (c *Controller) stopLocked() {
 	c.setState("disconnected")
 }
 
-func (c *Controller) Close() { c.mu.Lock(); defer c.mu.Unlock(); c.stopLocked() }
+func (c *Controller) Close() {
+	c.mu.Lock()
+	c.stopLocked()
+	done := c.realDone
+	accountDone := c.accountDone
+	if c.accountCancel != nil {
+		c.accountCancel()
+	}
+	c.mu.Unlock()
+	if done != nil {
+		<-done
+	}
+	if accountDone != nil {
+		<-accountDone
+	}
+}
 
 func oneOf(value string, options ...string) bool {
 	for _, option := range options {

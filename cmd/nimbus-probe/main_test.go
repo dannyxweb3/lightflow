@@ -39,3 +39,17 @@ func TestCoreDiagnosticSinkRetainsOnlyFixedCategories(t *testing.T) {
 		t.Fatal("wrong timeout category")
 	}
 }
+
+func TestCoreCertificateDiagnosticCategories(t *testing.T) {
+	for _, tc := range []struct{ message, code string }{
+		{"x509: certificate signed by unknown authority", "CORE_TLS_CA_UNTRUSTED"},
+		{"x509: certificate is valid for hidden.example, not other.example", "CORE_TLS_NAME_MISMATCH"},
+		{"x509: certificate has expired or is not yet valid", "CORE_TLS_TIME_INVALID"},
+	} {
+		sink := &safeCoreEvents{}
+		sink.Write([]byte(tc.message))
+		if sink.classification() != tc.code {
+			t.Fatalf("expected %s, got %s", tc.code, sink.classification())
+		}
+	}
+}

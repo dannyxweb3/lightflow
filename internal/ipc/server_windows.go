@@ -36,7 +36,18 @@ func serve(ctx context.Context, name string, controller *daemon.Controller) erro
 	if err != nil {
 		return err
 	}
-	dacl := "D:P(A;;GA;;;" + user.User.Sid.String() + ")"
+	return ServeUser(ctx, name, controller, user.User.Sid.String(), false)
+}
+
+// ServeUser is used by the SYSTEM service, with one configured controlling SID.
+func ServeUser(ctx context.Context, name string, controller *daemon.Controller, sid string, system bool) error {
+	if _, err := windows.StringToSid(sid); err != nil {
+		return err
+	}
+	dacl := "D:P(A;;GA;;;" + sid + ")"
+	if system {
+		dacl += "(A;;GA;;;SY)"
+	}
 	listener, err := winio.ListenPipe(name, &winio.PipeConfig{SecurityDescriptor: dacl, InputBufferSize: 8192, OutputBufferSize: 65536})
 	if err != nil {
 		return fmt.Errorf("open development pipe: %w", err)

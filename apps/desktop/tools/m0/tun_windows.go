@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,7 +63,11 @@ func requireElevation() error {
 }
 
 func bindGatewayInterface(ctx context.Context, dir, device string, config []byte) ([]byte, error) {
-	if err := networkCheck(ctx, "Gateway", dir, device, ""); err != nil {
+	host, _, err := experimentGateway(dir)
+	if err != nil {
+		return nil, err
+	}
+	if err := networkCheck(ctx, "Gateway", dir, device, host); err != nil {
 		return nil, err
 	}
 	name, err := os.ReadFile(filepath.Join(dir, "gateway-interface.txt"))
@@ -78,9 +83,25 @@ func bindGatewayInterface(ctx context.Context, dir, device string, config []byte
 	return json.MarshalIndent(parsed, "", "  ")
 }
 
+func experimentGateway(dir string) (string, int, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, "gateway-endpoint.json"))
+	var endpoint struct {
+		Host string
+		Port int
+	}
+	if err != nil || json.Unmarshal(raw, &endpoint) != nil || net.ParseIP(endpoint.Host).To4() == nil || endpoint.Port < 1 || endpoint.Port > 65535 {
+		return "", 0, errors.New("INVALID_EXPERIMENT_GATEWAY")
+	}
+	return endpoint.Host, endpoint.Port, nil
+}
+
 // All captures are bounded to a fixed public test address and the test gateway.
 // Do not touch another PktMon session or its filters.
 func beginExperiment(ctx context.Context, dir, device string) (func() error, error) {
+	gateway, gatewayPort, err := experimentGateway(dir)
+	if err != nil {
+		return nil, err
+	}
 	if err := networkCheck(ctx, "Before", dir, device, ""); err != nil {
 		return nil, err
 	}
@@ -90,6 +111,14 @@ func beginExperiment(ctx context.Context, dir, device string) (func() error, err
 	}
 	if os.WriteFile(filepath.Join(dir, "fixed-target-ip.txt"), []byte(target), 0600) != nil {
 		return nil, errors.New("TARGET_WRITE_FAILED")
+	}
+	if _, desktop := ctx.Value(desktopKey{}).(desktopOptions); desktop {
+		// Interactive use never captures the user's ongoing traffic.
+		return func() error {
+			cleanup, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			return networkCheck(cleanup, "After", dir, device, "")
+		}, nil
 	}
 	// Localized status is inspected conservatively. Unknown output refuses capture.
 	status, _ := packetCommand(ctx, "status") // PktMon can return nonzero when no session is running.
@@ -106,7 +135,7 @@ func beginExperiment(ctx context.Context, dir, device string) (func() error, err
 			packetCommand(cleanup, "filter", "remove", name)
 		}
 	}
-	if _, err := packetCommand(ctx, "filter", "add", names[0], "-i", "192.168.194.128", "-t", "UDP", "-p", "4433"); err != nil {
+	if _, err := packetCommand(ctx, "filter", "add", names[0], "-i", gateway, "-t", "UDP", "-p", fmt.Sprint(gatewayPort)); err != nil {
 		return nil, errors.New("CAPTURE_FILTER_FAILED")
 	}
 	if _, err := packetCommand(ctx, "filter", "add", names[1], "-i", target, "-t", "TCP", "-p", "443"); err != nil {
@@ -145,7 +174,7 @@ func beginExperiment(ctx context.Context, dir, device string) (func() error, err
 		if os.MkdirAll(evidence, 0700) != nil || securefile.RestrictDirectory(evidence) != nil {
 			failures = append(failures, errors.New("EVIDENCE_ACL_FAILED"))
 		} else {
-			for _, name := range []string{"packets.etl", "network-before.json", "network-after.json", "network-error-id.txt"} {
+			for _, name := range []string{"packets.etl", "network-before.json", "network-after.json", "network-error-id.txt", "fixed-target-ip.txt"} {
 				if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
 					if os.WriteFile(filepath.Join(evidence, name), data, 0600) != nil {
 						failures = append(failures, errors.New("EVIDENCE_WRITE_FAILED"))
@@ -244,6 +273,61 @@ func proveTUN(ctx context.Context, dir, device string) error {
 	body, err := io.ReadAll(io.LimitReader(response.Body, 65536))
 	if err != nil || response.StatusCode != 200 || !strings.Contains(string(body), "Example Domain") {
 		return errors.New("TUN_RESPONSE_INVALID")
+	}
+	return nil
+}
+
+func proveEgressTUN(ctx context.Context, dir, device string) (string, error) {
+	addresses, err := net.DefaultResolver.LookupIP(ctx, "ip4", "api.ipify.org")
+	if err != nil || len(addresses) == 0 {
+		return "", errors.New("EGRESS_TUN_DNS_FAILED")
+	}
+	for _, ip := range addresses {
+		if !netip.MustParsePrefix("198.18.0.0/16").Contains(netip.MustParseAddr(ip.String())) {
+			return "", errors.New("EGRESS_TUN_DNS_NOT_OWNED")
+		}
+		if err := networkCheck(ctx, "Route", dir, device, ip.String()); err != nil {
+			return "", err
+		}
+	}
+	return publicIPv4(ctx)
+}
+
+func proveDomainTUN(ctx context.Context, dir, device string) error {
+	dnsCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	addresses, err := net.DefaultResolver.LookupIP(dnsCtx, "ip4", "example.com")
+	cancel()
+	if err != nil || len(addresses) == 0 {
+		return errors.New("TUN_SYSTEM_DNS_QUERY_FAILED")
+	}
+	for _, address := range addresses {
+		ip, ok := netip.AddrFromSlice(address)
+		if !ok || !netip.MustParsePrefix("198.18.0.0/16").Contains(ip.Unmap()) {
+			return errors.New("TUN_SYSTEM_DNS_NOT_OWNED_FAKE_IP")
+		}
+		if err := networkCheck(ctx, "Route", dir, device, address.String()); err != nil {
+			return err
+		}
+	}
+	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("REDIRECT_REJECTED") }}
+	request, _ := http.NewRequestWithContext(ctx, "GET", "https://example.com/", nil)
+	response, err := client.Do(request)
+	if err != nil {
+		var timeout net.Error
+		if errors.As(err, &timeout) && timeout.Timeout() {
+			return errors.New("TUN_DOMAIN_TARGET_TIMEOUT")
+		}
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return errors.New("TUN_DOMAIN_TARGET_EOF")
+		}
+		return errors.New("TUN_DOMAIN_HTTPS_FAILED")
+	}
+	defer response.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(response.Body, 65536))
+	if err != nil || response.StatusCode != 200 || !strings.Contains(string(data), "Example Domain") {
+		return errors.New("TUN_DOMAIN_RESPONSE_INVALID")
 	}
 	return nil
 }

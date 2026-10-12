@@ -2,13 +2,16 @@ package main
 
 import (
 	"encoding/json"
-	"os"
 	"testing"
+
+	"nimbus/internal/controlclient"
 )
 
 func TestTUNInterceptsIPv6AndPreservesMandatoryTunnelRule(t *testing.T) {
 	t.Chdir("../../../..")
-	raw, err := os.ReadFile("apps/desktop/tools/m0/baseline.json")
+	candidate := controlclient.Candidate{Protocol: "hysteria2", Transport: "quic", Host: "192.0.2.1", Port: 4433, Credential: "test-only"}
+	candidate.PublicParams.ServerName = "gateway.example"
+	raw, err := configuration(candidate, "global", "", `\\.\pipe\test`, 12345, "test-auth")
 	if err != nil {
 		t.Fatal(err)
 	}

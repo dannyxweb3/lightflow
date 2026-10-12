@@ -19,12 +19,13 @@
       "properties": {
         "api_version": { "const": 1 },
         "request_id": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "method": { "enum": ["get_snapshot", "connect", "disconnect", "update_settings"] },
+        "method": { "enum": ["get_snapshot", "connect", "disconnect", "update_settings", "login", "logout", "refresh_account"] },
         "params": { "type": "object" }
       },
       "allOf": [
-        { "if": { "properties": { "method": { "enum": ["get_snapshot", "disconnect"] } } }, "then": { "properties": { "params": { "maxProperties": 0 } } } },
-        { "if": { "properties": { "method": { "const": "connect" } } }, "then": { "properties": { "params": { "type": "object", "additionalProperties": false, "properties": { "country_code": { "enum": ["", "SG", "JP", "US", "DE", "AU", "GB"] } } } } } },
+        { "if": { "properties": { "method": { "enum": ["get_snapshot", "disconnect", "logout", "refresh_account"] } } }, "then": { "properties": { "params": { "maxProperties": 0 } } } },
+        { "if": { "properties": { "method": { "const": "login" } } }, "then": { "properties": { "params": { "type": "object", "additionalProperties": false, "required": ["email", "password"], "properties": { "email": { "type": "string", "format": "email", "maxLength": 254 }, "password": { "type": "string", "minLength": 1, "maxLength": 128, "writeOnly": true } } } } } },
+        { "if": { "properties": { "method": { "const": "connect" } } }, "then": { "properties": { "params": { "type": "object", "additionalProperties": false, "properties": { "country_code": { "type": "string", "pattern": "^([A-Z]{2})?$" } } } } } },
         { "if": { "properties": { "method": { "const": "update_settings" } } }, "then": { "properties": { "params": { "$ref": "#/$defs/settings" } } } }
       ]
     },
@@ -34,11 +35,13 @@
       "properties": {
         "instance_id": { "type": "string", "minLength": 1 },
         "sequence": { "type": "integer", "minimum": 0 },
-        "state": { "enum": ["disconnected", "authorizing", "preparing", "connecting", "verifying", "connected"] },
+        "state": { "enum": ["disconnected", "authorizing", "preparing", "connecting", "verifying", "connected", "disconnecting"] },
         "country_code": { "type": "string" },
         "operation_id": { "type": "string" },
         "connected_at": { "type": "string", "format": "date-time" },
         "simulation": { "type": "boolean" },
+        "last_error": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
+        "account": { "$ref": "#/$defs/account" },
         "daemon_version": { "type": "string" },
         "settings": { "$ref": "#/$defs/settings" },
         "countries": { "type": "array", "items": {
@@ -46,6 +49,17 @@
           "required": ["code", "name", "city", "latency_ms"],
           "properties": { "code": { "type": "string" }, "name": { "type": "string" }, "city": { "type": "string" }, "latency_ms": { "type": "integer", "minimum": 0 } }
         } }
+      }
+    },
+    "account": {
+      "type": "object", "additionalProperties": false,
+      "required": ["authenticated", "busy", "email", "plan", "expires_at", "enabled", "device_count", "device_limit", "concurrent_limit", "checked_at"],
+      "properties": {
+        "authenticated": { "type": "boolean" }, "busy": { "type": "boolean" },
+        "email": { "type": "string" }, "plan": { "type": "string" },
+        "expires_at": { "type": "string" }, "checked_at": { "type": "string" },
+        "enabled": { "type": "boolean" }, "device_count": { "type": "integer", "minimum": 0 },
+        "device_limit": { "type": "integer", "minimum": 0 }, "concurrent_limit": { "type": "integer", "minimum": 0 }
       }
     },
     "response": {

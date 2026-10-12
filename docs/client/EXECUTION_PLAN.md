@@ -27,6 +27,10 @@
 
 ## 关键验收
 
+最新进度（2026-10-10，更新下面历史阻塞）：生产 Mihomo 全局和智能海外 TUN 转发、系统 fake-IP DNS、严格 TLS、公网出口切换、activate、立即 renew 与再次转发通过；全局正常回收及智能模式自有核心强杀后网络快照一致。测试例外没有带入生产。具体实验标识和边界见 [M0_EVIDENCE.md](M0_EVIDENCE.md) 最新章节。
+
+下一步集中补有效抓包、智能国内直连、DNS/IPv6 专项与长期定时续租；切网/睡眠/父进程崩溃和跨用户权限仍待验证。生产转发已经调通，完整 M0′ 门禁仍未退出，真实 Service/UI 不提前标记完成。下面关于不可达、证书和 TUN 超时的段落为历史记录。
+
 后续补测：测试 IP 入口已恢复，普通/管理员固定公网 IPv4 SOCKS 对照通过；TUN 转发与有效抓包仍失败。用户指定新控制面域名 `lightflow.u26d.local:8443`，当前证书 SAN 不匹配，等待服务端更新证书。完整 M0′ 与真实强杀恢复均未通过，详见实测记录。
 
 | 项目 | 验收证据 |
@@ -42,6 +46,8 @@
 代码变更按共享规则执行 frontend build/test、Go test/vet、Rust check；Windows 实现用 build tag，依赖变化还在 Linux 验证。真实网络实验另留证据，mock 与编译不能替代。
 
 ## 目录与协作
+
+2026-10-10 用户要求提前接入真实桌面开发入口：已接入 Windows Service、DPAPI 会话、持久设备、受限 IPC、真实连接/断开与持续续租机制，生产启动器改用真实服务，测试演示不变。随后按用户选择的待办第 3 项，实现桌面登录、本机退出及真实订阅/设备数量展示；安装更新不再自动登录。详见 [DESKTOP_REAL.md](DESKTOP_REAL.md)、[ACCOUNT.md](ACCOUNT.md)。C1 为部分实现，M0′ 剩余验收继续保留；不将阶段顺序调整当作验收通过。下一步仍优先补真实长期续租/刷新、网络与权限专项，再推进正式交付。
 
 新实现只放 `apps/desktop/`、`cmd/lightflow-daemon/`、`internal/client/`、`docs/client/`。根 `AGENTS.md` 明列旧客户端目录、三个现有根 scripts、启动器与 CI 的例外；C1 单独迁移并更新导入/入口/CI，再收窄例外。共享 IPC schema 留 `contracts/`，云端契约归服务端。
 

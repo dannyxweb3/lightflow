@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Check, ChevronDown, CircleHelp, Cloud, Globe2, Home, LoaderCircle, LockKeyhole, Power, Search, Settings2, Shield, ShieldCheck, SlidersHorizontal, UserRound, Wifi, X } from 'lucide-react';
 import { browserPreview, request } from './client';
@@ -43,6 +43,9 @@ export default function App() {
   const [selected, setSelected] = useState('');
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
+  const emailInput = useRef<HTMLInputElement>(null);
+  const passwordInput = useRef<HTMLInputElement>(null);
+  const [submittingLogin, setSubmittingLogin] = useState(false);
   const snapshot = useQuery({
     queryKey: ['snapshot'], refetchInterval: 700,
     queryFn: async () => {
@@ -58,6 +61,7 @@ export default function App() {
   });
   const data = snapshot.isError ? undefined : snapshot.data;
   const ready = !!data;
+  const real = data?.simulation === false;
   const busy = isBusy(data?.state);
   const connected = data?.state === 'connected';
   const active = !!data && data.state !== 'disconnected';
@@ -65,19 +69,38 @@ export default function App() {
   const country = countries.find(c => c.code === (active ? data.country_code : selected));
   const filtered = countries.filter(c => `${c.name} ${c.code} ${c.city}`.toLowerCase().includes(search.toLowerCase()));
   const settings = data?.settings;
-  const error = notice || (snapshot.isError ? errorMessage(snapshot.error) : '');
+  const account = data?.account;
+  const accountBusy = !!account?.busy || submittingLogin;
+  const loggedIn = !!account?.authenticated;
+  const subscriptionValid = !!account?.enabled && Date.parse(account.expires_at) > Date.now();
+  const error = notice || (data?.last_error ? errorMessage(new Error(data.last_error)) : '') || (snapshot.isError ? errorMessage(snapshot.error) : '');
   const disabled = !ready || mutation.isPending;
 
   function updateMode(mode: NetworkMode) {
     if (settings) mutation.mutate({ method: 'update_settings', params: { ...settings, mode } });
   }
   function connect() {
+    if (real && !loggedIn && !active) { setPage('account'); return; }
     mutation.mutate(active ? { method: 'disconnect', params: {} } : { method: 'connect', params: { country_code: selected } });
+  }
+  async function login(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!emailInput.current || !passwordInput.current || accountBusy) return;
+    const params = { email: emailInput.current.value.trim(), password: passwordInput.current.value };
+    passwordInput.current.value = '';
+    setSubmittingLogin(true);
+    setNotice('');
+    // Do not put credentials in React Query's mutation cache or React state.
+    try {
+      const incoming = await request({ method: 'login', params });
+      queryClient.setQueryData<Snapshot>(['snapshot'], current => newest(current, incoming));
+    } catch (error) { setNotice(errorMessage(error)); }
+    finally { params.password = ''; setSubmittingLogin(false); }
   }
   function countryCard(c: Country) {
     return <button key={c.code} className={`country-card ${selected === c.code ? 'selected' : ''}`} disabled={active || mutation.isPending} onClick={() => setSelected(c.code)}>
       <Flag code={c.code}/><span className="country-info"><strong>{c.name}</strong><small>{c.city}</small></span>
-      <span className="latency"><i/>{c.latency_ms} ms</span>{selected === c.code ? <Check size={16}/> : <ArrowRight size={16}/>}
+      <span className="latency"><i/>{c.latency_ms ? `${c.latency_ms} ms` : '—'}</span>{selected === c.code ? <Check size={16}/> : <ArrowRight size={16}/>}
     </button>;
   }
 
@@ -87,32 +110,33 @@ export default function App() {
       <div className="workspace-label">YOUR EVERYDAY CONNECTION</div>
       <nav aria-label="主导航">{nav.map(({ id, label, icon: Icon }) => <button key={id} className={page === id ? 'nav-item current' : 'nav-item'} onClick={() => setPage(id)}><Icon size={19}/>{label}{page === id && <span className="nav-dot"/>}</button>)}</nav>
       <div className="sidebar-note"><Shield size={21}/><strong>让连接，回归简单。</strong><p>选择一个目的地，<br/>剩下的交给 Nimbus。</p></div>
-      <div className="sidebar-bottom"><button className={`nav-item ${page === 'diagnostics' ? 'current' : ''}`} onClick={() => setPage('diagnostics')}><CircleHelp size={18}/>帮助与诊断</button><button className={`profile ${page === 'account' ? 'selected' : ''}`} onClick={() => setPage('account')}><span className="avatar"><UserRound size={18}/></span><span><strong>开发工作区</strong><small>尚未接入账户服务</small></span><ArrowRight size={15}/></button><span className="version">NIMBUS FOR WINDOWS · 0.1.0</span></div>
+      <div className="sidebar-bottom"><button className={`nav-item ${page === 'diagnostics' ? 'current' : ''}`} onClick={() => setPage('diagnostics')}><CircleHelp size={18}/>帮助与诊断</button><button className={`profile ${page === 'account' ? 'selected' : ''}`} onClick={() => setPage('account')}><span className="avatar"><UserRound size={18}/></span><span><strong>{real ? (loggedIn ? '我的账号' : '登录账号') : '开发工作区'}</strong><small>{real ? (accountBusy ? '正在处理' : loggedIn ? account?.plan || '查看订阅' : '尚未登录') : '尚未接入账户服务'}</small></span><ArrowRight size={15}/></button><span className="version">NIMBUS FOR WINDOWS · 0.2.0</span></div>
     </aside>
 
     <main>
       <header><div className="breadcrumb">{launchProfile?.label ?? '工作区'} <span>/</span> {({ home: '连接', countries: '国家与地区', settings: '设置', account: '账户', diagnostics: '诊断' })[page]}</div><span className={`service-badge ${ready ? 'online' : ''}`}><i/>{ready ? (browserPreview ? '浏览器预览' : '本地服务就绪') : '等待本地服务'}</span></header>
       <div className="page-content">
-        <div className="demo-banner"><span><Shield size={15}/><strong>开发演示</strong> · 当前连接不会保护网络流量，国家及延迟为示例数据。</span><span>M1 / 客户端骨架</span></div>
-        {launchProfile && <div className="launch-profile"><strong>{launchProfile.label} · 待接入</strong><span>控制面：{launchProfile.control}</span><span>网关：{launchProfile.gateway}</span><small>此入口仅选择联调目标；桌面登录与真实连接尚未接入。</small></div>}
+        <div className="demo-banner"><span><Shield size={15}/><strong>{real ? '真实连接开发版' : '开发演示'}</strong> · {real ? '连接将接管系统流量；断线保护和完整防泄漏验收尚未完成。' : '当前连接不会保护网络流量，国家及延迟为示例数据。'}</span><span>{real ? 'Windows 网络服务' : '客户端骨架'}</span></div>
+        {launchProfile && !real && <div className="launch-profile"><strong>{launchProfile.label} · 演示</strong><small>当前服务为模拟，不会启用真实代理。</small></div>}
         {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => { setNotice(''); void snapshot.refetch(); }}>重试</button></div>}
 
         {page === 'home' && <>
           <div className="page-heading"><div className="eyebrow">A LITTLE FREEDOM, EVERY DAY</div><h1>世界很大，连接很简单。</h1><p>选择你的目的地，开启一段自在的网络旅程。</p></div>
           <section className={`connection-panel ${connected ? 'is-connected' : ''}`}>
             <div className="connection-controls"><span className="section-label"><i/> YOUR CONNECTION</span>
-              <div className={`status-tag ${connected ? 'connected' : ''}`}>{connected ? <ShieldCheck size={15}/> : <Shield size={15}/>} {ready ? stateLabels[data.state] : '服务尚未就绪'}</div>
+              <div className={`status-tag ${connected ? 'connected' : ''}`}>{connected ? <ShieldCheck size={15}/> : <Shield size={15}/>} {ready ? (!real && connected ? '演示已连接' : stateLabels[data.state]) : '服务尚未就绪'}</div>
               <h2>{connected ? '连接体验已就绪' : busy ? '为你寻找更好的连接' : '下一站，随你选择。'}</h2>
-              <p className="connection-copy">{connected ? '这是演示连接。真实网络接入将在服务端联调后启用。' : '智能选择连接位置，轻松探索更大的世界。'}</p>
+              <p className="connection-copy">{connected ? (real ? '真实网络转发已验证，连接持续运行。' : '这是演示连接，系统流量没有经过代理。') : '智能选择连接位置，轻松探索更大的世界。'}</p>
               <button className="destination" disabled={active || !ready} onClick={() => setPage('countries')}><span className="destination-icon">{country ? <Flag code={country.code}/> : <Globe2 size={23}/>}</span><span><small>连接目的地</small><strong>{country?.name ?? '自动选择 · 最佳位置'}</strong></span><ChevronDown size={17}/></button>
-              <button className={`connect-button ${active ? 'disconnect' : ''}`} disabled={disabled || (!active && settings?.mode === 'direct')} onClick={connect}>{busy ? <LoaderCircle className="spin" size={19}/> : <Power size={19}/>} {busy ? '取消连接' : connected ? '断开演示连接' : '快速连接'}</button>
-              <span className="connection-footnote"><LockKeyhole size={12}/>{connected ? '演示模式 · 网络未受保护' : '一键开启，复杂的交给我们'}</span>
+              <button className={`connect-button ${active ? 'disconnect' : ''}`} disabled={disabled || accountBusy || data?.state === 'disconnecting' || (!active && settings?.mode === 'direct') || (real && loggedIn && !subscriptionValid && !active)} onClick={connect}>{busy ? <LoaderCircle className="spin" size={19}/> : <Power size={19}/>} {data?.state === 'disconnecting' ? '正在断开' : busy ? '取消连接' : connected ? (real ? '断开连接' : '断开演示连接') : real && !loggedIn ? '登录后连接' : '快速连接'}</button>
+              {real && loggedIn && !subscriptionValid && !accountBusy && <p role="status">订阅未启用或已到期，请到账户页查看。</p>}
+              <span className="connection-footnote"><LockKeyhole size={12}/>{connected ? (real ? '系统代理已启用 · 断线保护未实现' : '演示模式 · 网络未受保护') : '一键开启，复杂的交给我们'}</span>
             </div><GlobeArt active={connected}/>
           </section>
           <section className="mode-strip"><div className="mode-description"><span className="soft-icon"><Settings2 size={19}/></span><div><strong>适合你的网络方式</strong><small>{settings?.mode === 'global' ? '所有互联网流量通过 VPN' : settings?.mode === 'direct' ? '恢复直接访问，不建立 VPN' : '国内访问更顺畅，其他流量按需连接'}</small></div></div><div className="segmented" aria-label="网络模式">{(['smart', 'global', 'direct'] as const).map(mode => <button key={mode} disabled={disabled || active} className={settings?.mode === mode ? 'chosen' : ''} onClick={() => updateMode(mode)}>{modeLabels[mode]}</button>)}</div></section>
           <div className="section-heading"><div><h3>你的下一个目的地</h3><p>从常用位置开始，世界触手可及。</p></div><button className="text-button" onClick={() => setPage('countries')}>查看全部位置 <ArrowRight size={15}/></button></div>
           <div className="country-grid">{countries.slice(0, 3).map(countryCard)}{!ready && <div className="empty-state">本地服务启动后显示可用位置。</div>}</div>
-          <div className="home-footer"><span><ShieldCheck size={14}/> 简单连接 · 自在探索</span><span>真实 VPN 尚未接入</span></div>
+          <div className="home-footer"><span><ShieldCheck size={14}/> 简单连接 · 自在探索</span><span>{real ? '真实 TUN 开发联调' : '真实 VPN 尚未接入'}</span></div>
         </>}
 
         {page === 'countries' && <>
@@ -126,19 +150,35 @@ export default function App() {
         </>}
 
         {page === 'settings' && <>
-          <div className="page-heading"><div className="eyebrow">MAKE YOURSELF AT HOME</div><h1>按照你的方式连接。</h1><p>简单的设置，更合适的体验。演示设置仅保留于服务运行期间。</p></div>
+          <div className="page-heading"><div className="eyebrow">MAKE YOURSELF AT HOME</div><h1>按照你的方式连接。</h1><p>设置保留于本地服务运行期间。</p></div>
           {active && <p className="inline-note">请先断开连接，再修改网络设置。</p>}
           <section className="settings-card"><h3>网络设置</h3><div className="setting-row"><div><strong>网络模式</strong><p>智能分流、全局连接或直接访问。</p></div><select aria-label="网络模式" value={settings?.mode ?? 'smart'} disabled={disabled || active} onChange={e => updateMode(e.target.value as NetworkMode)}>{Object.entries(modeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
-            <div className="setting-row"><div><strong>连接方式</strong><p>优先顺序由本地服务内部映射。</p></div><select aria-label="连接方式" value={settings?.transport_preference ?? 'auto'} disabled={disabled || active} onChange={e => settings && mutation.mutate({ method: 'update_settings', params: { ...settings, transport_preference: e.target.value as 'auto' | 'quic' | 'tcp' } })}><option value="auto">自动</option><option value="quic">QUIC 优先</option><option value="tcp">TCP 优先</option></select></div>
-            <div className="setting-row"><div><strong>允许局域网访问</strong><p>用于本地打印机、共享存储等网络资源。</p></div><button role="switch" aria-checked={settings?.allow_lan ?? false} aria-label="允许局域网访问" className={`toggle ${settings?.allow_lan ? 'on' : ''}`} disabled={disabled || active} onClick={() => settings && mutation.mutate({ method: 'update_settings', params: { ...settings, allow_lan: !settings.allow_lan } })}><span/></button></div>
+            <div className="setting-row"><div><strong>连接方式</strong><p>优先顺序由本地服务内部映射。</p></div><select aria-label="连接方式" value={settings?.transport_preference ?? 'auto'} disabled={disabled || active} onChange={e => settings && mutation.mutate({ method: 'update_settings', params: { ...settings, transport_preference: e.target.value as 'auto' | 'quic' | 'tcp' } })}><option value="auto">自动</option><option value="quic">QUIC 优先</option><option value="tcp" disabled={real}>TCP 优先（待接入）</option></select></div>
+            <div className="setting-row"><div><strong>允许局域网访问</strong><p>用于本地打印机、共享存储等网络资源。</p></div><button role="switch" aria-checked={settings?.allow_lan ?? false} aria-label="允许局域网访问" className={`toggle ${settings?.allow_lan ? 'on' : ''}`} disabled={disabled || active || real} onClick={() => settings && mutation.mutate({ method: 'update_settings', params: { ...settings, allow_lan: !settings.allow_lan } })}><span/></button></div>
             <div className="setting-row"><div><strong>断线保护 · Kill Switch</strong><p>需要 Windows 网络适配与故障恢复验证。</p></div><span className="pending-badge">尚未实现</span></div></section>
           <section className="settings-card"><h3>应用与隐私</h3><div className="setting-row"><div><strong>开机启动 / 系统托盘</strong><p>将在 Windows 服务与安装器阶段接入。</p></div><span className="pending-badge">待接入</span></div><div className="setting-row"><div><strong>产品遥测</strong><p>当前版本不上传使用数据。</p></div><span className="pending-badge">未启用</span></div></section>
         </>}
 
         {page === 'account' && <>
-          <div className="page-heading"><div className="eyebrow">YOUR NIMBUS SPACE</div><h1>属于你的连接空间。</h1><p>账户、订阅与设备将在服务端接口同步后接入。</p></div>
-          <section className="account-card"><span className="account-avatar"><UserRound size={32}/></span><h2>尚未登录</h2><p>当前处于开发工作区，不包含真实账户或套餐权益。</p><span className="pending-badge">等待服务端认证契约</span></section>
-          <section className="settings-card"><h3>联调准备</h3><div className="setting-row"><div><strong>登录与设备注册</strong><p>对齐 OIDC 登录方式与设备证明。</p></div><span className="pending-badge">待接入</span></div><div className="setting-row"><div><strong>订阅与连接授权</strong><p>有效订阅与服务器临时租约是正式连接的前置条件。</p></div><span className="pending-badge">待接入</span></div></section>
+          <div className="page-heading"><div className="eyebrow">YOUR NIMBUS SPACE</div><h1>属于你的连接空间。</h1><p>查看账号、订阅有效期与设备数量。</p></div>
+          {!real ? <section className="account-card"><h2>开发演示</h2><p>登录仅在真实桌面客户端中可用。</p></section> : !loggedIn ?
+            <section className="settings-card login-card"><h3>登录账号</h3><form onSubmit={event => void login(event)} autoComplete="off">
+              <label>邮箱<input ref={emailInput} type="email" name="email" autoComplete="off" maxLength={254} required disabled={accountBusy}/></label>
+              <label>密码<input ref={passwordInput} type="password" name="password" autoComplete="off" maxLength={128} required disabled={accountBusy}/></label>
+              <button className="small-primary" type="submit" disabled={disabled || accountBusy}>{accountBusy ? '正在登录…' : '登录'}</button>
+              <p>密码提交后清空，不保存到客户端。</p>
+            </form></section> : <>
+              <section className="account-card"><span className="account-avatar"><UserRound size={32}/></span><h2>{account?.email || '已登录'}</h2><p>{accountBusy ? '正在处理账号请求…' : subscriptionValid ? '订阅有效' : '订阅未启用或已到期'}</p><span className="pending-badge">{account?.plan || '等待账号信息'}</span></section>
+              <section className="settings-card"><h3>订阅与设备</h3>{[
+                ['有效期', account?.expires_at ? new Date(account.expires_at).toLocaleString() : '—'],
+                ['设备数量 / 上限', `${account?.device_count ?? 0} / ${account?.device_limit ?? 0}`],
+                ['同时连接上限', String(account?.concurrent_limit ?? 0)],
+                ['最近更新', account?.checked_at ? new Date(account.checked_at).toLocaleString() : '尚未更新'],
+              ].map(([label, value]) => <div className="setting-row" key={label}><strong>{label}</strong><span>{value}</span></div>)}
+                <div className="account-actions"><button className="small-primary" disabled={disabled || accountBusy || active} onClick={() => mutation.mutate({ method: 'refresh_account', params: {} })}>刷新账号信息</button><button className="small-primary" disabled={disabled || accountBusy} onClick={() => mutation.mutate({ method: 'logout', params: {} })}>{accountBusy ? '正在处理…' : '退出本机登录'}</button></div>
+                <p>退出会先断开本机连接，再清理本机登录状态；其他设备保持登录。连接期间请先断开再刷新账号信息。</p>
+              </section>
+            </>}
         </>}
 
         {page === 'diagnostics' && <>
@@ -146,7 +186,7 @@ export default function App() {
           <section className="settings-card"><h3>运行状态</h3>{[
             ['本地控制服务', ready ? '可访问' : '不可访问'], ['IPC 版本', ready ? 'v1' : '—'],
             ['服务版本', data?.daemon_version ?? '—'], ['运行模式', browserPreview ? '浏览器演示' : ready ? 'Named Pipe 开发服务' : '—'],
-            ['连接状态', data ? stateLabels[data.state] : '未就绪'], ['真实网络接管', '尚未实现'], ['DNS / 路由 / 断线保护', '尚未验证'],
+            ['连接状态', data ? stateLabels[data.state] : '未就绪'], ['真实网络接管', real ? (connected ? 'TUN 已启用' : '未连接') : '模拟'], ['DNS / 路由 / 断线保护', '完整验收尚未完成'],
           ].map(([label, value]) => <div key={label} className="setting-row"><strong>{label}</strong><span className="muted">{value}</span></div>)}<button className="small-primary diagnostics-refresh" disabled={snapshot.isFetching} onClick={() => void snapshot.refetch()}><Wifi size={16}/>重新检查本地服务</button></section>
         </>}
       </div>

@@ -37,9 +37,15 @@ type Client struct {
 	base         *url.URL
 	http         *http.Client
 	token        string
+	refresh      string
+	accessUntil  time.Time
+	SaveSession  func(Session) error
 	deviceID     string
 	key          ed25519.PrivateKey
 	responseDate time.Time
+	profile      *Profile
+	deviceCount  int
+	checkedAt    time.Time
 }
 
 // ResponseDate exposes only the last HTTPS Date, for isolated clock diagnostics.
@@ -69,6 +75,19 @@ type Plan struct {
 }
 
 func New(baseURL, caFile string) (*Client, error) {
+	return newClient(baseURL, caFile, false)
+}
+
+// NewInsecureS0Test is an explicit developer-only exception for the two S0 origins.
+// Production callers continue to use New, which always verifies certificates.
+func NewInsecureS0Test(baseURL string) (*Client, error) {
+	if baseURL != "https://lightflow.u26d.local:8443" && baseURL != "https://192.168.194.128:8443" {
+		return nil, errors.New("INSECURE_CONTROL_REQUIRES_S0_ORIGIN")
+	}
+	return newClient(baseURL, "", true)
+}
+
+func newClient(baseURL, caFile string, insecureS0 bool) (*Client, error) {
 	base, err := url.Parse(baseURL)
 	if err != nil || base.Scheme != "https" || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" || (base.Path != "" && base.Path != "/") {
 		return nil, errors.New("INVALID_CONTROL_URL")
@@ -85,7 +104,7 @@ func New(baseURL, caFile string) (*Client, error) {
 			return nil, errors.New("INVALID_CA")
 		}
 	}
-	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}
+	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12, InsecureSkipVerify: insecureS0}} // Explicit S0 test exception only.
 	client := &http.Client{Transport: transport, Timeout: 12 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("REDIRECT_NOT_ALLOWED") }}
 	return &Client{base: base, http: client}, nil
 }
@@ -98,7 +117,9 @@ func (c *Client) Login(ctx context.Context, email, password string) error {
 		Password string `json:"password"`
 	}{email, password})
 	var response struct {
-		AccessToken string `json:"access_token"`
+		AccessToken  string    `json:"access_token"`
+		RefreshToken string    `json:"refresh_token"`
+		ExpiresAt    time.Time `json:"expires_at"`
 	}
 	status, _, err := c.call(ctx, "POST", "/v1/auth/login", body, false, "", &response)
 	if err != nil {
@@ -108,6 +129,7 @@ func (c *Client) Login(ctx context.Context, email, password string) error {
 		return errors.New("INVALID_LOGIN_RESPONSE")
 	}
 	c.token = response.AccessToken
+	c.refresh, c.accessUntil = response.RefreshToken, response.ExpiresAt
 	return nil
 }
 
@@ -148,6 +170,10 @@ func (c *Client) Create(ctx context.Context, idempotencyKey string) (Plan, error
 
 // CreateMode is used by the isolated client prototype; retries keep identical bytes.
 func (c *Client) CreateMode(ctx context.Context, idempotencyKey, mode string) (Plan, error) {
+	return c.CreateCountryMode(ctx, idempotencyKey, "SG", mode)
+}
+
+func (c *Client) CreateCountryMode(ctx context.Context, idempotencyKey, country, mode string) (Plan, error) {
 	if mode != "global" && mode != "smart" {
 		return Plan{}, errors.New("INVALID_CONNECTION_MODE")
 	}
@@ -156,7 +182,7 @@ func (c *Client) CreateMode(ctx context.Context, idempotencyKey, mode string) (P
 		Country   string   `json:"country_code"`
 		Mode      string   `json:"mode"`
 		Protocols []string `json:"protocols"`
-	}{"SG", mode, []string{"hysteria2"}})
+	}{country, mode, []string{"hysteria2"}})
 	return c.plan(ctx, "POST", "/v1/connection-sessions", body, idempotencyKey)
 }
 
@@ -211,6 +237,11 @@ var safeCode = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
 var safeRequestID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
 func (c *Client) call(ctx context.Context, method, path string, body []byte, signed bool, idempotency string, out any) (int, time.Duration, error) {
+	if path != "/v1/auth/login" && path != "/v1/auth/refresh" && !c.accessUntil.IsZero() && time.Until(c.accessUntil) < time.Minute {
+		if err := c.refreshAccess(ctx); err != nil {
+			return 0, 0, err
+		}
+	}
 	endpoint := *c.base
 	parsed, err := url.Parse(path)
 	if err != nil {

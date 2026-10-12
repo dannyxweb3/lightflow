@@ -83,3 +83,13 @@ v1.19.32 的 YAML/JSON 字段拼写为 `tls.custom-certifactes`。Hysteria2 在�
 ## 后续门禁
 
 测试服务恢复后先复测无 TUN 对照，再排查启用 TUN 后的转发超时，取得有效双网卡抓包。继续补智能国内直连、全局私网边界、DNS/IPv6、强杀恢复和不同 Windows 用户拒绝访问实测。完整 M0′ 条件见 [执行计划](EXECUTION_PLAN.md)，当前不进入 C1。
+
+## 2026-10-10 生产原型更新
+
+以上故障描述保留为历史。生产 Mihomo 真实 TUN 已通过全局和智能海外转发、公网出口切换、租约激活/立即续租及清理恢复，见 [M0_EVIDENCE.md](M0_EVIDENCE.md)。生产不使用本机 VMware NAT 例外。
+
+开发者包装器 `run-tun.ps1` 新增 `-Production -Control $productionOrigin -Account $productionAccount`；变量由开发者在本地设置，不将生产地址/账号写入仓库。`-DomainProbe -EgressProbe -ResolveProbe` 验证系统 fake-IP DNS、普通域名 HTTPS 和固定公网 IPv4 查询服务的出口切换；`-Mode smart -ForceKill` 测智能海外与强杀清理。所有实验结束后自动断开，不是持续连接入口或正式桌面功能。
+
+生产使用系统 CA，拒绝 `-InsecureTestControl`、`-VMwareNatBypass`、`-DNSOff`、`-Relaxed`、`-OSRoute`。只把本次候选预解析 IPv4 加入网关路由排除与接口绑定，保留返回的 TLS SNI；控制面域名是必要直连例外。配置、原始日志及用户访问记录不交给 UI。`-EgressProbe` 的启用前查询是明确的直连基线，不是 VPN 证据。
+
+PktMon 仍无有效数据包；出口切换、路由检查和真实 HTTPS 成功不能代替 DNS/IPv6 防泄漏、国内直连或长期稳定性验收。继续补齐 M0′，再进入真实服务与 UI。

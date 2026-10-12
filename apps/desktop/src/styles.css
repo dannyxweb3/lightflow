@@ -59,3 +59,10 @@ header { height: 69px; border-bottom: 1px solid #eeede6; padding: 0 36px; displa
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 .launch-profile { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; border: 1px solid #e6e5dc; border-radius: 8px; padding: 12px; margin: 12px 0; color: #697458; font-size: 11px; overflow-wrap: anywhere; }
 .launch-profile small { flex-basis: 100%; color: #929b85; }
+.login-card { max-width: 520px; }
+.login-card form { display: grid; gap: 18px; margin-top: 22px; }
+.login-card label { display: grid; gap: 8px; font-size: 13px; color: #626a53; }
+.login-card input { padding: 12px; border: 1px solid #cbd0bd; border-radius: 7px; background: #fffefa; font: inherit; min-width: 0; }
+.login-card input:focus { outline: 2px solid #91a176; outline-offset: 2px; }
+.login-card p, .account-actions + p { font-size: 12px; color: #737d63; line-height: 1.7; }
+.account-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }

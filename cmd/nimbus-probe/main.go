@@ -35,6 +35,7 @@ const officialDigest = "162ef8fe55dc7ec810dda662908f8e65ec36bd6da39cb87c3bd66184
 func main() {
 	base := flag.String("control", "https://192.168.194.128:8443", "control HTTPS origin")
 	ca := flag.String("ca", ".local/ca.crt", "explicit lab CA; use -ca= for production system trust")
+	gatewayCA := flag.String("gateway-ca", "", "explicit trusted gateway CA only; empty inherits -ca without changing control HTTPS trust")
 	account := flag.String("account", ".local/initial-account.json", "user credential file; never use admin/gateway credentials")
 	core := flag.String("core", ".local/core/hysteria.exe", "fixed SHA256-verified Hysteria2 v2.13.0 binary")
 	override := flag.String("lab-gateway-host", "", "explicit lab-only replacement of a loopback candidate host; keeps TLS SNI")
@@ -45,7 +46,7 @@ func main() {
 	flag.Parse()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	if err := run(ctx, *base, *ca, *account, *core, *override, *resolveLocally, *controlProbe, *handshakeOnly, *showCandidates); err != nil {
+	if err := run(ctx, *base, *ca, *gatewayCA, *account, *core, *override, *resolveLocally, *controlProbe, *handshakeOnly, *showCandidates); err != nil {
 		fmt.Fprintln(os.Stderr, "FAIL:", err)
 		os.Exit(1)
 	}
@@ -57,7 +58,7 @@ type probeTarget struct {
 	Control bool
 }
 
-func run(ctx context.Context, base, ca, accountFile, coreFile, override string, resolveLocally, controlProbe, handshakeOnly, showCandidates bool) (result error) {
+func run(ctx context.Context, base, ca, gatewayCA, accountFile, coreFile, override string, resolveLocally, controlProbe, handshakeOnly, showCandidates bool) (result error) {
 	if showCandidates && (resolveLocally || controlProbe || handshakeOnly || override != "") {
 		return errors.New("CONFLICTING_DIAGNOSTIC_MODES")
 	}
@@ -244,7 +245,19 @@ func run(ctx context.Context, base, ca, accountFile, coreFile, override string, 
 			Listen string `json:"listen"`
 		} `json:"socks5"`
 	}{Server: net.JoinHostPort(host, fmt.Sprint(candidate.Port)), Auth: candidate.Credential}
-	config.TLS.SNI, config.TLS.CA, config.SOCKS5.Listen = candidate.PublicParams.ServerName, caPath, socksAddress
+	gatewayCAPath := caPath
+	if gatewayCA != "" {
+		gatewayCAPath, err = filepath.Abs(gatewayCA)
+		if err != nil {
+			return errors.New("INVALID_GATEWAY_CA_PATH")
+		}
+		caBytes, readErr := os.ReadFile(gatewayCAPath)
+		pool := x509.NewCertPool()
+		if readErr != nil || !pool.AppendCertsFromPEM(caBytes) {
+			return errors.New("INVALID_GATEWAY_CA")
+		}
+	}
+	config.TLS.SNI, config.TLS.CA, config.SOCKS5.Listen = candidate.PublicParams.ServerName, gatewayCAPath, socksAddress
 	configBytes, err := json.Marshal(config)
 	if err != nil {
 		return errors.New("CORE_CONFIG_FAILED")
@@ -369,7 +382,7 @@ func waitForHandshake(ctx context.Context, events *safeCoreEvents, budget time.D
 		if events.authenticated() {
 			return nil
 		}
-		if code := events.classification(); code == "CORE_AUTHENTICATION_FAILED" || code == "CORE_TLS_VALIDATION_FAILED" || code == "CORE_CONFIG_FAILED" {
+		if code := events.classification(); code == "CORE_AUTHENTICATION_FAILED" || strings.HasPrefix(code, "CORE_TLS_") || code == "CORE_CONFIG_FAILED" {
 			return errors.New(code)
 		}
 		select {
@@ -457,6 +470,12 @@ func (s *safeCoreEvents) Write(data []byte) (int, error) {
 		s.connected = true
 	}
 	switch {
+	case strings.Contains(text, "unknown authority"):
+		s.category = "CORE_TLS_CA_UNTRUSTED"
+	case strings.Contains(text, "certificate is valid for"), strings.Contains(text, "not valid for"):
+		s.category = "CORE_TLS_NAME_MISMATCH"
+	case strings.Contains(text, "certificate has expired"), strings.Contains(text, "not yet valid"):
+		s.category = "CORE_TLS_TIME_INVALID"
 	case strings.Contains(text, "x509"), strings.Contains(text, "certificate"):
 		s.category = "CORE_TLS_VALIDATION_FAILED"
 	case strings.Contains(text, "authentication"), strings.Contains(text, "unauthorized"):

@@ -25,4 +25,10 @@ func beginExperiment(context.Context, string, string) (func() error, error) {
 	return nil, errors.New("WINDOWS_ONLY_PROTOTYPE")
 }
 func proveTUN(context.Context, string, string) error { return errors.New("WINDOWS_ONLY_PROTOTYPE") }
-func ownCoreJob(*exec.Cmd) (func(), error)           { return nil, errors.New("WINDOWS_ONLY_PROTOTYPE") }
+func proveEgressTUN(context.Context, string, string) (string, error) {
+	return "", errors.New("WINDOWS_ONLY_PROTOTYPE")
+}
+func proveDomainTUN(context.Context, string, string) error {
+	return errors.New("WINDOWS_ONLY_PROTOTYPE")
+}
+func ownCoreJob(*exec.Cmd) (func(), error) { return nil, errors.New("WINDOWS_ONLY_PROTOTYPE") }

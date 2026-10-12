@@ -6,11 +6,21 @@ param(
     [switch]$ProxyOnly,
     [switch]$Relaxed,
     [switch]$OSRoute,
-    [ValidateSet('https://lightflow.u26d.local:8443','https://192.168.194.128:8443')][string]$Control = 'https://lightflow.u26d.local:8443',
+    [switch]$InsecureTestControl,
+    [switch]$QuicCompat,
+    [switch]$VMwareNatBypass,
+    [switch]$DomainProbe,
+    [switch]$EgressProbe,
+    [string]$Control = 'https://lightflow.u26d.local:8443',
+    [switch]$Production,
+    [string]$Account,
     [switch]$Elevated,
     [string]$ExpectedHash
 )
 $ErrorActionPreference = 'Stop'
+if ($Control -notmatch '^https://[a-zA-Z0-9.-]+(:[0-9]+)?$') { throw 'Invalid control HTTPS origin.' }
+if ($Account -and $Account -notmatch '^[a-zA-Z0-9_./~:-]+$') { throw 'Unsupported account path characters.' }
+if ($Production -and (-not $Account -or $InsecureTestControl -or $VMwareNatBypass -or $DNSOff -or $Relaxed -or $OSRoute)) { throw 'Production requires an explicit account and strict network options.' }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
 $binary = Join-Path $repo '.local/m0/m0.exe'
 $safeLog = Join-Path $repo '.local/m0/tun.safe.log'
@@ -32,6 +42,13 @@ try {
         if ($ProxyOnly) { $arguments += ' -ProxyOnly' }
         if ($Relaxed) { $arguments += ' -Relaxed' }
         if ($OSRoute) { $arguments += ' -OSRoute' }
+        if ($InsecureTestControl) { $arguments += ' -InsecureTestControl' }
+        if ($QuicCompat) { $arguments += ' -QuicCompat' }
+        if ($VMwareNatBypass) { $arguments += ' -VMwareNatBypass' }
+        if ($DomainProbe) { $arguments += ' -DomainProbe' }
+        if ($EgressProbe) { $arguments += ' -EgressProbe' }
+        if ($Production) { $arguments += ' -Production' }
+        if ($Account) { $arguments += ' -Account ' + $Account }
         if ($ProxyOnly) { Write-Host 'Starting elevated proxy-only control experiment. Accept the Windows UAC prompt.' }
         else { Write-Host 'Starting authorized isolated-machine TUN experiment. Accept the Windows UAC prompt.' }
         $process = Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -ArgumentList $arguments -PassThru
@@ -43,8 +60,8 @@ try {
     } else {
         if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Administrator token required.' }
         if (-not $ExpectedHash -or (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash -ne $ExpectedHash) { throw 'Prototype executable changed before elevation.' }
-        $account = '.local/windows-s0-account.json'
-        if (-not (Test-Path -LiteralPath $account) -and (Test-Path -LiteralPath '.local/windows-s0~account.json')) { $account = '.local/windows-s0~account.json' }
+        if (-not $Account) { $Account = '.local/windows-s0-account.json' }
+        if (-not $Production -and -not (Test-Path -LiteralPath $Account) -and (Test-Path -LiteralPath '.local/windows-s0~account.json')) { $Account = '.local/windows-s0~account.json' }
         $arguments = @('-mode',$Mode,'-account',$account,'-control',$Control)
         if (-not $ProxyOnly) { $arguments += '-tun' }
         if ($ForceKill) { $arguments += '-force-kill' }
@@ -52,6 +69,12 @@ try {
         if ($ResolveProbe) { $arguments += '-resolve-probe' }
         if ($Relaxed) { $arguments += '-tun-relaxed' }
         if ($OSRoute) { $arguments += '-tun-os-route' }
+        if ($InsecureTestControl) { $arguments += '-insecure-test-control' }
+        if ($QuicCompat) { $arguments += '-quic-compat' }
+        if ($VMwareNatBypass) { $arguments += '-lab-vmware-nat-bypass' }
+        if ($DomainProbe) { $arguments += '-probe-domain' }
+        if ($EgressProbe) { $arguments += '-probe-egress' }
+        if ($Production) { $arguments += '-production' }
         $worker = Start-Process -FilePath $binary -ArgumentList $arguments -WorkingDirectory $repo -WindowStyle Hidden -PassThru -RedirectStandardOutput $safeLog -RedirectStandardError $safeError
         $workerHandle = $worker.Handle
         $worker.WaitForExit()

@@ -3,6 +3,7 @@ param(
     [string]$Account = '.local/windows-s0-account.json',
     [ValidateSet('https://lightflow.u26d.local:8443','https://192.168.194.128:8443')][string]$Control = 'https://lightflow.u26d.local:8443',
     [switch]$ResolveProbe,
+    [switch]$InsecureTestControl,
     [switch]$Check
 )
 $ErrorActionPreference = 'Stop'
@@ -17,6 +18,7 @@ try {
     & (Join-Path $PSScriptRoot 'prepare.ps1')
     $arguments = @('run','./apps/desktop/tools/m0','-mode',$Mode,'-control',$Control)
     if ($ResolveProbe) { $arguments += '-resolve-probe' }
+    if ($InsecureTestControl) { $arguments += '-insecure-test-control' }
     if ($Check) { $arguments += '-check' } else { $arguments += @('-account',$Account) }
     & go @arguments
     if ($LASTEXITCODE -ne 0) { throw 'M0 probe failed. See the safe error code above.' }

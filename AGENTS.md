@@ -23,8 +23,8 @@
 | 文件或目录 | 客户端用途与规则 |
 | --- | --- |
 | `apps/desktop/` | React/Tauri UI、Rust Bridge、安装包资源、客户端测试。M0′ 原型脚本放 `apps/desktop/tools/`，后续新客户端脚本也放这里。 |
-| `cmd/lightflow-daemon/` | 后续真实 Windows Service 入口，尚未实现。 |
-| `internal/client/` | 后续服务、IPC、DPAPI、API、租约、Mihomo、连接控制、网络事件；Windows 实现用 build tag，避免影响 Linux。 |
+| `cmd/lightflow-daemon/` | 真实 Windows Service 开发入口与服务侧账号配置；正式安装包仍待交付。 |
+| `internal/client/` | 真实服务后端、DPAPI 会话存储及后续连接模块；Windows 实现用 build tag，避免影响 Linux。 |
 | `docs/client/` | 独立客户端技术方案、执行计划、配置基线、实测证据、服务端请求；服务端引用结论，不代改正文。 |
 | `cmd/nimbus-daemon/`、`cmd/nimbus-probe/` | 现有客户端演示服务与协议联调工具；迁移前继续归客户端，不是服务端代码。 |
 | `internal/daemon/`、`internal/ipc/`、`internal/controlclient/`、`internal/securefile/` | 现有客户端实现；迁移至 `internal/client/` 前归客户端。其他 `internal/` 路径仍归服务端。 |
